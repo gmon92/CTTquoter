@@ -4,8 +4,9 @@ import json
 import os
 import threading
 import webbrowser
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from quote_engine import calculate_quote
@@ -52,27 +53,42 @@ def geocode(address):
     return (float(pos["lat"]), float(pos["lon"]))
 
 
+def fetch_map_tile(z, x, y):
+    key = os.environ.get("TOMTOM_API_KEY")
+    if not key:
+        raise RuntimeError("TOMTOM_API_KEY is not configured")
+    url = f"https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key={quote(key)}"
+    req = Request(url, headers={"User-Agent": "CharlottesvilleTransportationQuoter/0.1"})
+    with urlopen(req, timeout=20) as response:
+        return response.read(), response.headers.get("Content-Type", "image/png")
+
+
 def make_quote(payload):
     pickup = payload["pickup"].strip()
     destination = payload["destination"].strip()
     vehicle = payload.get("vehicle", "sedan")
-    base_rate = float(payload.get("base_rate") or 0)
-    depart_at = payload.get("depart_at") or None
+    pickup_time = payload.get("pickup_time") or None
     pickup_point = geocode(pickup)
     destination_point = geocode(destination)
+    driver_departure = None
+    if pickup_time:
+        approach = calculate_route(origin=HOME, destination=pickup_point)
+        requested_pickup = datetime.fromisoformat(pickup_time.replace("Z", "+00:00"))
+        if requested_pickup.tzinfo is None:
+            requested_pickup = requested_pickup.replace(tzinfo=timezone.utc)
+        driver_departure = (requested_pickup - timedelta(minutes=approach["minutes"])).isoformat()
     full = calculate_route(
         origin=HOME,
         destination=HOME,
         waypoints=[pickup_point, destination_point],
-        depart_at=depart_at,
+        depart_at=driver_departure,
     )
     one_way = calculate_route(
         origin=pickup_point,
         destination=destination_point,
-        depart_at=depart_at,
+        depart_at=pickup_time,
     )
     result = calculate_quote(
-        base_rate=base_rate,
         total_driver_minutes=full["minutes"],
         one_way_miles=one_way["miles"],
         vehicle=vehicle,
@@ -80,6 +96,10 @@ def make_quote(payload):
     result.update({
         "pickup": pickup,
         "destination": destination,
+        "pickup_time": pickup_time,
+        "pickup_point": [pickup_point[0], pickup_point[1]],
+        "destination_point": [destination_point[0], destination_point[1]],
+        "home_point": [HOME[0], HOME[1]],
         "full_cycle": full,
         "one_way": one_way,
         "home_base": "910 Anderson St., Charlottesville, VA",
@@ -100,6 +120,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             with open("index.html", "rb") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
+        elif self.path.startswith("/api/tiles/") and self.path.endswith(".png"):
+            try:
+                parts = self.path[:-4].split("/")
+                if len(parts) != 6:
+                    raise ValueError("invalid map tile path")
+                z, x, y = (int(value) for value in parts[3:])
+                if not (0 <= z <= 22 and 0 <= x < 2**z and 0 <= y < 2**z):
+                    raise ValueError("map tile coordinates out of range")
+                image, content_type = fetch_map_tile(z, x, y)
+                self._send(200, image, content_type)
+            except Exception:
+                self._send(502, '{"error":"Map tile unavailable"}')
         else:
             self._send(404, '{"error":"not found"}')
 
@@ -119,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    server = ThreadingHTTPServer(("0.0.0.0", 8765), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
     url = "http://127.0.0.1:8765"
     print(f"Charlottesville Transportation Quoter: {url}")
     threading.Timer(0.5, lambda: webbrowser.open(url)).start()

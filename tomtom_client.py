@@ -15,10 +15,13 @@ def _point(coords):
 def build_route_request(*, origin, destination, waypoints=None, depart_at=None):
     locations = {"origin": _point(origin), "destination": _point(destination)}
     if waypoints:
-        locations["waypoints"] = [_point(p) for p in waypoints]
-    body = {"routePlanningLocations": locations, "routeType": "fastest"}
+        locations["waypoints"] = {
+            "type": "MultiPoint",
+            "coordinates": [_point(p)["coordinates"] for p in waypoints],
+        }
+    body = {"routePlanningLocations": locations, "routeType": "fast"}
     if depart_at:
-        body["departAt"] = depart_at
+        body["departureDateTime"] = depart_at
     return {
         "url": BASE_URL,
         "headers": {
@@ -32,10 +35,16 @@ def build_route_request(*, origin, destination, waypoints=None, depart_at=None):
 
 
 def parse_route_response(data):
-    summary = data["routes"][0]["summary"]
+    route = data["routes"][0]
+    summary = route["summary"]
+    points = []
+    for leg in route.get("legs", []):
+        coordinates = leg.get("path", {}).get("coordinates", [])
+        points.extend([[float(lat), float(lon)] for lon, lat in coordinates])
     return {
         "miles": round(summary["lengthInMeters"] / 1609.344, 2),
-        "minutes": round(summary["travelTimeInSeconds"] / 60, 2),
+        "minutes": round(summary["travelDurationInSeconds"] / 60, 2),
+        "points": points,
     }
 
 
