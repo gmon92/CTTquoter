@@ -57,6 +57,7 @@ The key is read from `.env` or the environment and is never shown in the browser
 
 For private access from phones using a Cloudflare Tunnel and approved email logins, follow [the Cloudflare setup guide](CLOUDFLARE_SETUP.md). The host computer must stay awake and run both the app and connector.
 
+- Expands airport shorthand **CHO, IAD, RIC, DCA, BWI, ROA, and LYH** into airport names and street addresses before routing. Codes ignore case and surrounding spaces; `CHO airport` also works. Supported in pickup, destination, and extra stops. Resolved addresses appear in quote results and comparisons.
 - Geocodes pickup and destination with TomTom Search API.
 - Calculates the full driver cycle: 910 Anderson → pickup → destination → 910 Anderson.
 - Calculates the one-way customer route separately.
@@ -67,6 +68,7 @@ For private access from phones using a Cloudflare Tunnel and approved email logi
 - Accepts a customer pickup time for route estimates.
 - Starts with the vehicle's default hourly rate ($70/hour sedan, $85/hour SUV) and calculates the quote from full driver-cycle time.
 - Shows three linked values: final quote, hourly rate per full driver hour, and equivalent rate per customer one-way mile. Editing any one recalculates the other two.
+- **Add to comparison** saves the current quote as a named option in a side-by-side table, including route, vehicle, pickup time, rates, additional charge, tip, and total. Adjust the current pricing or calculate another trip, then add another option. Rename options directly in the table, remove them individually, or use **Clear comparison** to keep working on the current quote. **New quote / clear all** clears the form, results, and comparison. Saved options last until cleared or the page is reloaded.
 - Shows matching base-rate references from `Taxi Pricing.xlsx`, grouped by the spreadsheet's rate schedules, plus relevant airport pickup notes. Listed point-to-point routes match in either direction. Airport names/codes and addresses within 1.5 km of an airport reference point can match; nearby matches are labeled for confirmation. These references do not change the calculated quote.
 - Reads the workbook from the app folder each time a quote is calculated, so saving a pricing update in Excel updates future references. Keep its existing table layout and keep the workbook in the app folder; no Excel installation or extra Python packages are required to read it.
 - Accepts pasted notes for reference; notes are not parsed automatically.

@@ -222,3 +222,65 @@ test('tip can be turned off while the quote field is temporarily cleared', () =>
   assert.equal(fields.tip_breakdown.hidden, true);
   assert.equal(fields.quote_label.textContent, 'Final quote ($)');
 });
+
+function comparisonScreen() {
+  function element() {
+    return {value:'', checked:false, children:[],
+      appendChild(child){this.children.push(child);},
+      append(...children){this.children.push(...children);},
+      replaceChildren(){this.children=[];}, insertAdjacentElement(){}, setAttribute(){}, focus(){this.focused=true;}};
+  }
+  const fields={};
+  const context=vm.createContext({document:{
+    getElementById:id=>fields[id] ||= element(), createElement:element, querySelectorAll:()=>[]
+  }});
+  vm.runInContext(script,context);
+  const run=code=>vm.runInContext(code,context);
+  run(`trip={pickup:'IAD',destination:'Charlottesville',stops:[{address:'Stop A'}],vehicle:'sedan',
+    full_cycle:{minutes:120,miles:100},one_way:{minutes:60,miles:40}};
+    tripPrice=140;calculatedPickupTime='2026-10-23T10:30';`);
+  fields.final_quote=element(); fields.final_quote.value='160';
+  fields.include_charge=element(); fields.include_charge.checked=true;
+  fields.additional_charge=element(); fields.additional_charge.value='20';
+  fields.include_tip=element(); fields.include_tip.checked=true;
+  return {fields,run};
+}
+
+test('comparison snapshots preserve separate pricing, trip details, and tip',()=>{
+  const {fields,run}=comparisonScreen();
+  run('addComparison()');
+  fields.final_quote.value='200';
+  run("trip.stops[0].address='Stop B';trip.vehicle='suv';addComparison()");
+  assert.equal(run('comparisons.length'),2);
+  assert.equal(run('comparisons[0].total'),160);
+  assert.equal(run('comparisons[0].tip'),32);
+  assert.equal(run('comparisons[0].charge'),20);
+  assert.equal(run('comparisons[0].stops[0]'),'Stop A');
+  assert.equal(run('comparisons[1].total'),200);
+  assert.equal(run('comparisons[1].vehicle'),'suv');
+  assert.equal(fields.comparison.hidden,false);
+  run('removeComparison(1)');
+  assert.equal(run('comparisons.length'),1);
+  assert.equal(run('comparisons[0].id'),2);
+  run('clearComparisons()');
+  assert.equal(run('comparisons.length'),0);
+  assert.equal(fields.comparison.hidden,true);
+  assert.ok(run('trip') !== null);
+});
+
+test('comparison rejects incomplete prices and new quote clears all state',()=>{
+  const {fields,run}=comparisonScreen();
+  fields.final_quote.value='';
+  run('addComparison()');
+  assert.equal(run('comparisons.length'),0);
+  fields.final_quote.value='160';
+  run('addComparison();startNewQuote()');
+  assert.equal(run('comparisons.length'),0);
+  assert.equal(run('trip'),null);
+  assert.equal(fields.pickup.value,'');
+  assert.equal(fields.vehicle.value,'sedan');
+  assert.equal(fields.include_tip.checked,false);
+  assert.equal(fields.additional_charge.value,'0');
+  assert.equal(fields.calculate_button.disabled,false);
+  assert.equal(run('calculationVersion'),1);
+});

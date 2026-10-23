@@ -35,6 +35,12 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 .price-breakdown{margin-top:16px;padding:12px;background:#fff;border-radius:6px}
 .tip-total{margin-top:16px;padding:16px;background:#e9f8ed;border:1px solid #9ac6a5;border-radius:6px}
 .tip-total h2{margin-bottom:0}
+.compare-scroll{overflow-x:auto}
+.compare-table{border-collapse:collapse;width:100%;margin-top:12px}
+.compare-table th,.compare-table td{min-width:190px;padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #ccd8e5;white-space:pre-line;overflow-wrap:anywhere}
+.compare-table th:first-child{min-width:130px}
+.compare-table input{margin:0}
+.compare-table button{margin-top:8px}
 @media(max-width:650px){.grid,.rates{grid-template-columns:1fr}}
 </style>
 </head>
@@ -47,6 +53,7 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
   <div><label for="pickup">Pickup address</label><input id="pickup" placeholder="e.g. IAD"></div>
   <div><label for="destination">Final destination</label><input id="destination" placeholder="e.g. 4125 Cannon Brook Way, Charlottesville, VA"></div>
 </div>
+<p class="hint">Airport shorthand: CHO, IAD, RIC, DCA, BWI, ROA, or LYH. Codes work for pickup, destination, and extra stops.</p>
 <label class="option-toggle"><input id="include_stops" type="checkbox" onchange="toggleStops()">Add more customer stops</label>
 <div id="stops_fields" class="optional-fields" hidden>
   <p class="hint">Stops are visited in the order listed, between pickup and the final destination. Calculate the trip again after changing stops.</p>
@@ -57,14 +64,24 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
   <div><label for="vehicle">Vehicle</label><select id="vehicle"><option value="sedan">Sedan</option><option value="suv">SUV</option></select></div>
   <div><label for="pickup_time">Customer pickup time (optional)</label><input id="pickup_time" type="datetime-local"></div>
 </div>
+<button id="calculate_button" type="button" onclick="calculateTrip()">Calculate trip</button>
+<button class="secondary" type="button" onclick="startNewQuote()">New quote / clear all</button>
+<div id="out" aria-live="polite"></div>
+<div id="pricing_options">
 <label class="option-toggle"><input id="include_charge" type="checkbox" onchange="toggleAdditionalCharge()">Add a dollar amount to the quote</label>
 <div id="charge_fields" class="optional-fields" hidden>
   <label for="additional_charge">Additional charge ($)</label>
   <input id="additional_charge" type="number" min="0" step="0.01" value="0" disabled oninput="syncValues('additional_charge')">
 </div>
 <label class="option-toggle"><input id="include_tip" type="checkbox" onchange="updateTip()">Add 20% tip (all-inclusive price)</label>
-<button id="calculate_button" type="button" onclick="calculateTrip()">Calculate trip</button>
-<div id="out" aria-live="polite"></div>
+</div>
+<section id="comparison" class="result" hidden aria-labelledby="comparison_heading">
+  <h2 id="comparison_heading">Compare quotes</h2>
+  <p class="hint">Saved options stay fixed while you change the current quote. Comparisons are kept until you clear them or reload this page.</p>
+  <button class="secondary" type="button" onclick="clearComparisons()">Clear comparison</button>
+  <div id="comparison_table" class="compare-scroll"></div>
+</section>
+<p id="comparison_status" class="hint" role="status"></p>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -73,6 +90,11 @@ let map = null;
 let mapLayers = [];
 let tripPrice = 0;
 let stopCounter = 0;
+let comparisons = [];
+let comparisonCounter = 0;
+let calculationVersion = 0;
+let addressErrorInputs = [];
+let calculatedPickupTime = '';
 const money = value => Number(value).toFixed(2);
 
 function formatDuration(minutes){
@@ -162,14 +184,43 @@ function renderTipBreakdown(total){
   document.getElementById('all_inclusive_text').textContent=money(Math.round((total+tip)*100)/100);
 }
 
+function clearAddressErrors(){
+  addressErrorInputs.forEach(input=>{
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-describedby');
+  });
+  addressErrorInputs=[];
+  document.querySelectorAll('.address-error').forEach(error=>error.remove());
+}
+
+function showAddressErrors(errors, stopInputs){
+  Object.entries(errors || {}).forEach(([field,message])=>{
+    const input=field.startsWith('stops.') ? stopInputs[Number(field.split('.')[1])] : document.getElementById(field);
+    if(!input) return;
+    const error=document.createElement('div');
+    error.id=`${input.id}_error`;
+    error.className='error address-error';
+    error.textContent=message;
+    input.setAttribute('aria-invalid','true');
+    input.setAttribute('aria-describedby',error.id);
+    input.insertAdjacentElement('afterend',error);
+    addressErrorInputs.push(input);
+  });
+  if(addressErrorInputs.length) addressErrorInputs[0].focus();
+}
+
 async function calculateTrip(){
   if(additionalCharge()===null){document.getElementById('additional_charge').reportValidity();return;}
   const button=document.getElementById('calculate_button');
   if(button.disabled) return;
+  clearAddressErrors();
+  const stopInputs=document.getElementById('include_stops').checked ? Array.from(document.querySelectorAll('.extra-stop-address')).filter(input=>input.value.trim()) : [];
   button.disabled=true;
+  const version=++calculationVersion;
   trip=null;
   if(map){map.remove();map=null;mapLayers=[];}
   const out=document.getElementById('out');
+  parkPricingOptions();
   out.textContent='Calculating route...';
   const localTime=document.getElementById('pickup_time').value;
   const payload={
@@ -184,11 +235,18 @@ async function calculateTrip(){
   try{
     const response=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await response.json();
-    if(!response.ok) throw new Error(data.error || 'Could not calculate route');
+    if(version!==calculationVersion) return;
+    if(!response.ok){
+      showAddressErrors(data.field_errors,stopInputs);
+      throw new Error(data.error || 'Could not calculate route');
+    }
     trip=data;
+    calculatedPickupTime=localTime;
     tripPrice=data.trip_price;
     out.innerHTML=`<section class="result">
       <h2>Trip estimate</h2>
+      <button type="button" onclick="addComparison()">Add to comparison</button>
+      <p class="hint">Save this option, then adjust the rates or calculate a different trip to compare.</p>
       <div id="map" aria-label="TomTom route map"></div>
       <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${formatDuration(data.full_cycle.minutes)}</div>
       <div><b>Customer ${data.stops.length ? 'route with all stops' : 'one-way route'}:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
@@ -200,6 +258,7 @@ async function calculateTrip(){
         <label for="mileage_rate">Customer mileage rate ($/mile)<input id="mileage_rate" type="number" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="syncValues('mileage_rate')"></label>
         <label for="final_quote"><span id="quote_label">Final quote ($)</span><input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
       </div>
+      <div id="pricing_options_slot"></div>
       <div id="price_breakdown" class="price-breakdown" hidden>
         Trip price: $<span id="trip_price_text"></span> + additional charge: $<span id="charge_text"></span>
         <p><b><span id="calculated_quote_label">Final quote</span>: $<span id="total_text"></span></b></p>
@@ -211,7 +270,8 @@ async function calculateTrip(){
         <h2>All-inclusive price: $<span id="all_inclusive_text"></span></h2>
       </div>
     </section>`;
-    if(data.stops.length){
+    document.getElementById('pricing_options_slot').appendChild(document.getElementById('pricing_options'));
+    {
       const itinerary=document.getElementById('customer_itinerary');
       itinerary.hidden=false;
       [data.pickup,...data.stops.map(stop=>stop.address),data.destination].forEach(address=>{
@@ -224,14 +284,145 @@ async function calculateTrip(){
     renderBaseRateReferences(data.base_rate_reference);
     showMap(data);
   }catch(error){
+    if(version!==calculationVersion) return;
+    trip=null;
+    parkPricingOptions();
     out.innerHTML='';
     const message=document.createElement('p');
     message.className='error';
     message.textContent=error.message;
     out.appendChild(message);
   }finally{
-    button.disabled=false;
+    if(version===calculationVersion) button.disabled=false;
   }
+}
+
+
+function addComparison(){
+  if(!trip) return;
+  const quote=document.getElementById('final_quote');
+  const total=Number(quote.value);
+  const charge=additionalCharge();
+  if(quote.value.trim()==='' || !Number.isFinite(total) || total<0 || charge===null){
+    document.getElementById('comparison_status').textContent='Enter a valid quote and additional charge before comparing.';
+    return;
+  }
+  const tip=document.getElementById('include_tip').checked ? Math.round(Math.round(total*100)/5)/100 : 0;
+  const id=++comparisonCounter;
+  comparisons.push({id,name:`Option ${id}`,pickup:trip.pickup,destination:trip.destination,
+    stops:(trip.stops || []).map(stop=>stop.address),vehicle:trip.vehicle,
+    pickupTime:calculatedPickupTime,minutes:trip.full_cycle.minutes,miles:trip.one_way.miles,
+    customerMinutes:trip.one_way.minutes,driverMiles:trip.full_cycle.miles,
+    total,charge,tip,includeTip:document.getElementById('include_tip').checked,
+    hourly:trip.full_cycle.minutes ? total/(trip.full_cycle.minutes/60) : 0,
+    mileage:trip.one_way.miles ? total/trip.one_way.miles : 0});
+  renderComparisons();
+  document.getElementById('comparison_status').textContent=`Option ${id} added to comparison.`;
+}
+
+function removeComparison(id){
+  comparisons=comparisons.filter(option=>option.id!==id);
+  renderComparisons();
+  document.getElementById('comparison_status').textContent='Option removed.';
+}
+
+function clearComparisons(){
+  comparisons=[];
+  comparisonCounter=0;
+  renderComparisons();
+  document.getElementById('comparison_status').textContent='Comparison cleared.';
+}
+
+function renderComparisons(){
+  document.getElementById('comparison').hidden=!comparisons.length;
+  const container=document.getElementById('comparison_table');
+  container.replaceChildren();
+  if(!comparisons.length) return;
+  const table=document.createElement('table');
+  table.className='compare-table';
+  const head=document.createElement('thead');
+  const header=document.createElement('tr');
+  const corner=document.createElement('th');
+  corner.textContent='Quote details';
+  corner.scope='col';
+  header.appendChild(corner);
+  comparisons.forEach(option=>{
+    const cell=document.createElement('th');
+    cell.scope='col';
+    const name=document.createElement('input');
+    name.value=option.name;
+    name.setAttribute('aria-label',`Name for option ${option.id}`);
+    name.oninput=()=>{option.name=name.value;};
+    const remove=document.createElement('button');
+    remove.type='button';
+    remove.className='secondary';
+    remove.textContent='Remove';
+    remove.setAttribute('aria-label',`Remove option ${option.id}`);
+    remove.onclick=()=>removeComparison(option.id);
+    cell.append(name,remove);
+    header.appendChild(cell);
+  });
+  head.appendChild(header);
+  table.appendChild(head);
+  const body=document.createElement('tbody');
+  const rows=[
+    ['Route',o=>[o.pickup,...o.stops,o.destination].join(' → ')],
+    ['Vehicle',o=>o.vehicle==='suv' ? 'SUV' : 'Sedan'],
+    ['Pickup time',o=>o.pickupTime.replace('T',' ') || 'Not specified'],
+    ['Full driver cycle',o=>`${o.driverMiles} miles / ${formatDuration(o.minutes)}`],
+    ['Customer route',o=>`${o.miles} miles / ${formatDuration(o.customerMinutes)}`],
+    ['Hourly rate',o=>`$${money(o.hourly)}/hr`],
+    ['Mileage rate',o=>`$${money(o.mileage)}/mile`],
+    ['Trip price',o=>`$${money(o.total-o.charge)}`],
+    ['Additional charge',o=>`$${money(o.charge)}`],
+    ['Quote before tip',o=>`$${money(o.total)}`],
+    ['20% tip',o=>o.includeTip ? `$${money(o.tip)}` : 'Not included'],
+    ['Total',o=>`$${money(o.total+o.tip)}`]
+  ];
+  rows.forEach(([label,value])=>{
+    const row=document.createElement('tr');
+    const heading=document.createElement('th');
+    heading.scope='row';
+    heading.textContent=label;
+    row.appendChild(heading);
+    comparisons.forEach(option=>{
+      const cell=document.createElement('td');
+      cell.textContent=value(option);
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  });
+  table.appendChild(body);
+  container.appendChild(table);
+}
+
+function parkPricingOptions(){
+  document.getElementById('out').insertAdjacentElement('afterend',document.getElementById('pricing_options'));
+}
+
+function startNewQuote(){
+  clearAddressErrors();
+  ++calculationVersion;
+  trip=null;
+  tripPrice=0;
+  calculatedPickupTime='';
+  if(map){map.remove();map=null;}
+  mapLayers=[];
+  ['notes','pickup','destination','pickup_time'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('vehicle').value='sedan';
+  ['include_stops','include_charge','include_tip'].forEach(id=>document.getElementById(id).checked=false);
+  document.getElementById('stop_list').replaceChildren();
+  stopCounter=0;
+  document.getElementById('stops_fields').hidden=true;
+  document.getElementById('charge_fields').hidden=true;
+  document.getElementById('additional_charge').value='0';
+  document.getElementById('additional_charge').disabled=true;
+  parkPricingOptions();
+  document.getElementById('out').replaceChildren();
+  document.getElementById('calculate_button').disabled=false;
+  clearComparisons();
+  document.getElementById('comparison_status').textContent='Ready for a new quote.';
+  document.getElementById('pickup').focus();
 }
 
 function renderBaseRateReferences(reference){

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app import HOME, make_quote
+from address_aliases import resolve_address
 from base_rates import find_trip_reference_rates
 
 
@@ -16,10 +17,10 @@ class TripOptionTests(unittest.TestCase):
         return result, routing
 
     def test_extra_stops_preserve_order_in_both_routes(self):
-        result, routing = self.quote(stops=['Keswick Hall', 'CHO'])
+        result, routing = self.quote(stops=['Keswick Hall', resolve_address('CHO')])
         full, customer = routing.call_args_list
-        pickup = (1, len('IAD'))
-        stops = [(1, len('Keswick Hall')), (1, len('CHO'))]
+        pickup = (1, len(resolve_address('IAD')))
+        stops = [(1, len('Keswick Hall')), (1, len(resolve_address('CHO')))]
         destination = (1, len('Charlottesville'))
         self.assertEqual(full.kwargs['origin'], HOME)
         self.assertEqual(full.kwargs['destination'], HOME)
@@ -27,7 +28,7 @@ class TripOptionTests(unittest.TestCase):
         self.assertEqual(customer.kwargs['origin'], pickup)
         self.assertEqual(customer.kwargs['destination'], destination)
         self.assertEqual(customer.kwargs['waypoints'], stops)
-        self.assertEqual([stop['address'] for stop in result['stops']], ['Keswick Hall', 'CHO'])
+        self.assertEqual([stop['address'] for stop in result['stops']], ['Keswick Hall', resolve_address('CHO')])
 
     def test_empty_stops_are_ignored_and_no_option_keeps_original_quote(self):
         result, routing = self.quote(stops=['', '  '])

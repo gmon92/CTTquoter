@@ -8,9 +8,11 @@ import webbrowser
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from address_aliases import resolve_address
 from quote_engine import calculate_quote
 from base_rates import find_trip_reference_rates
 from tomtom_client import calculate_route
@@ -56,6 +58,7 @@ load_profile_env()
 
 
 def geocode(address):
+    address = resolve_address(address)
     key = os.environ.get("TOMTOM_API_KEY")
     if not key:
         raise RuntimeError("TOMTOM_API_KEY is not configured")
@@ -80,15 +83,44 @@ def fetch_map_tile(z, x, y):
         return response.read(), response.headers.get("Content-Type", "image/png")
 
 
+class AddressErrors(ValueError):
+    def __init__(self, errors):
+        super().__init__('Check the highlighted addresses.')
+        self.fields = errors
+
+
+def geocode_fields(pickup, stops, destination):
+    errors = {}
+    points = []
+    for field, address in [('pickup', pickup), *[(f'stops.{i}', stop) for i, stop in enumerate(stops)], ('destination', destination)]:
+        if not address:
+            errors[field] = 'Enter an address or airport code.'
+            points.append(None)
+            continue
+        try:
+            points.append(geocode(address))
+        except HTTPError as exc:
+            if exc.code in (401, 403, 429):
+                raise RuntimeError('Address lookup service unavailable. Check the TomTom API key, access, and usage limits.') from exc
+            errors[field] = f'Address lookup failed (HTTP {exc.code}). Check this address or try its full street address.'
+            points.append(None)
+        except ValueError:
+            errors[field] = f'Could not find “{address}”. Check the spelling or enter a full street address.'
+            points.append(None)
+        except (URLError, TimeoutError) as exc:
+            raise RuntimeError('Could not reach the address lookup service. Please try again.') from exc
+    if errors:
+        raise AddressErrors(errors)
+    return points[0], points[1:-1], points[-1]
+
+
 def make_quote(payload):
-    pickup = payload["pickup"].strip()
-    destination = payload["destination"].strip()
-    if not pickup or not destination:
-        raise ValueError("Pickup and final destination are required")
+    pickup = resolve_address(payload["pickup"])
+    destination = resolve_address(payload["destination"])
     stops = payload.get("stops", [])
     if not isinstance(stops, list) or any(not isinstance(stop, str) for stop in stops):
         raise ValueError("Stops must be a list of addresses")
-    stops = [stop.strip() for stop in stops if stop.strip()]
+    stops = [resolve_address(stop) for stop in stops if stop.strip()]
     if len(stops) > 148:
         raise ValueError("A trip can have at most 148 additional stops")
     additional_charge = float(payload.get("additional_charge") or 0)
@@ -100,9 +132,7 @@ def make_quote(payload):
         raise ValueError("Include tip must be true or false")
     vehicle = payload.get("vehicle", "sedan")
     pickup_time = payload.get("pickup_time") or None
-    pickup_point = geocode(pickup)
-    stop_points = [geocode(stop) for stop in stops]
-    destination_point = geocode(destination)
+    pickup_point, stop_points, destination_point = geocode_fields(pickup, stops, destination)
     driver_departure = None
     if pickup_time:
         approach = calculate_route(origin=HOME, destination=pickup_point)
@@ -194,6 +224,10 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length))
             self._send(200, json.dumps(make_quote(payload)))
+        except AddressErrors as exc:
+            self._send(400, json.dumps({"error": str(exc), "field_errors": exc.fields}))
+        except HTTPError as exc:
+            self._send(502, json.dumps({"error": f"Routing service failed (HTTP {exc.code}). Check the trip route and pickup time, then try again."}))
         except Exception as exc:
             self._send(400, json.dumps({"error": str(exc)}))
 
