@@ -36,11 +36,16 @@ If you previously exported a different key in Terminal, run `unset TOMTOM_API_KE
 
 ## Run on Windows PowerShell
 
+For first-time setup, create your local settings file from the project folder:
+
 ```powershell
-$env:TOMTOM_API_KEY = "your-key"
-cd path\to\CTTquoter
-python app.py
+Copy-Item .env.example .env
+notepad .env
 ```
+
+Replace the placeholder with your actual TomTom API key and save the file. Then double-click **Start Quoter.bat** in File Explorer. It finds Python 3, starts the app from the project folder, and opens your browser. Keep the command window open while using the app; press Control+C in it to stop the app.
+
+You can also run `py -3 app.py` from the project folder. An existing `TOMTOM_API_KEY` environment variable takes precedence over `.env`.
 
 The app opens at http://127.0.0.1:8765.
 
