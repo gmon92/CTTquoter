@@ -23,6 +23,14 @@ Save with Control+O, press Return, then exit with Control+X. Start the app:
 python3 app.py
 ```
 
+For everyday use, double-click **Start Quoter.command** in Finder. It starts the app from its own folder and opens your browser. Keep the Terminal window open while using the app; press Control+C in that window to stop it.
+
+Git preserves the launcher's executable permission. If macOS reports a permission error (for example, after downloading a ZIP), run this once in the project folder:
+
+```bash
+chmod +x "Start Quoter.command"
+```
+
 The app reads `.env` from the same folder as `app.py`. You only need to save the key once.
 If you previously exported a different key in Terminal, run `unset TOMTOM_API_KEY` before starting the app to use the key from `.env`. An exported environment value takes precedence over the file. Restart the app after changing the key.
 
