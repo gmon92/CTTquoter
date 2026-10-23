@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: cttquoter
+    runtime: python
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: python -m compileall -q app.py quote_engine.py tomtom_client.py base_rates.py
+    startCommand: python app.py
+    healthCheckPath: /health
+    envVars:
+      - key: TOMTOM_API_KEY
+        sync: false
+      - key: QUOTER_HOST
+        value: "0.0.0.0"
+      - key: QUOTER_OPEN_BROWSER
+        value: "0"
+      - key: PYTHONUNBUFFERED
+        value: "1"

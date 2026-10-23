@@ -161,6 +161,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -168,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             with open(APP_DIR / "index.html", "rb") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
+        elif self.path == "/health":
+            self._send(200, '{"status":"ok"}')
         elif self.path.startswith("/api/tiles/") and self.path.endswith(".png"):
             try:
                 parts = self.path[:-4].split("/")
@@ -198,12 +201,32 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def server_settings(environ=None):
+    values = os.environ if environ is None else environ
+    host = values.get("QUOTER_HOST", "127.0.0.1")
+    try:
+        port = int(values.get("PORT", "8765"))
+    except ValueError:
+        raise ValueError("PORT must be a number between 1 and 65535") from None
+    if not 1 <= port <= 65535:
+        raise ValueError("PORT must be a number between 1 and 65535")
+    open_browser = (values.get("QUOTER_OPEN_BROWSER", "1") == "1"
+                    and host in ("127.0.0.1", "localhost"))
+    return host, port, open_browser
+
+
 def main():
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
-    url = "http://127.0.0.1:8765"
-    print(f"Charlottesville Transportation Quoter: {url}")
-    threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-    server.serve_forever()
+    host, port, open_browser = server_settings()
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Charlottesville Transportation Quoter listening on {host}:{port}", flush=True)
+    if open_browser:
+        threading.Timer(0.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
