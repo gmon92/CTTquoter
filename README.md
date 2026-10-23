@@ -60,6 +60,8 @@ The key is read from `.env` or the environment and is never shown in the browser
 - Accepts a customer pickup time for route estimates.
 - Starts with the vehicle's default hourly rate ($70/hour sedan, $85/hour SUV) and calculates the quote from full driver-cycle time.
 - Shows three linked values: final quote, hourly rate per full driver hour, and equivalent rate per customer one-way mile. Editing any one recalculates the other two.
+- Shows matching base-rate references from `Taxi Pricing.xlsx`, grouped by the spreadsheet's rate schedules, plus relevant airport pickup notes. Listed point-to-point routes match in either direction. Airport names/codes and addresses within 1.5 km of an airport reference point can match; nearby matches are labeled for confirmation. These references do not change the calculated quote.
+- Reads the workbook from the app folder each time a quote is calculated, so saving a pricing update in Excel updates future references. Keep its existing table layout and keep the workbook in the app folder; no Excel installation or extra Python packages are required to read it.
 - Accepts pasted notes for reference; notes are not parsed automatically.
 
 ## Verification

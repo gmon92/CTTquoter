@@ -17,6 +17,12 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 .rates{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .rates label{margin-top:0}
 .hint{font-size:.92rem;color:#444}
+.base-reference{margin-top:18px;padding:14px;background:#fff9e6;border:1px solid #e4cd89;border-radius:8px;overflow-x:auto}
+.base-reference h3{margin:0 0 8px}
+.base-reference table{width:100%;border-collapse:collapse;font-size:.92rem}
+.base-reference th,.base-reference td{padding:9px 7px;text-align:left;border-bottom:1px solid #e4cd89;vertical-align:top}
+.base-reference .selected-vehicle{font-weight:700;background:#fff0bd}
+.base-reference small{display:block;color:#555;margin-top:4px}
 .error{color:#a00}
 @media(max-width:650px){.grid,.rates{grid-template-columns:1fr}}
 </style>
@@ -72,6 +78,7 @@ async function calculateTrip(){
       <div id="map" aria-label="TomTom route map"></div>
       <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${formatDuration(data.full_cycle.minutes)}</div>
       <div><b>Customer one-way route:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
+      <section id="base_rate_references" class="base-reference" aria-label="Base rate references"></section>
       <p class="hint">Change any one of the three values below. The other two will update to match the same quote.</p>
       <div class="rates">
         <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="syncValues('hourly_rate')"></label>
@@ -79,6 +86,7 @@ async function calculateTrip(){
         <label for="final_quote">Final quote ($)<input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
       </div>
     </section>`;
+    renderBaseRateReferences(data.base_rate_reference);
     showMap(data);
   }catch(error){
     out.innerHTML='';
@@ -87,6 +95,59 @@ async function calculateTrip(){
     message.textContent=error.message;
     out.appendChild(message);
   }
+}
+
+function renderBaseRateReferences(reference){
+  const panel=document.getElementById('base_rate_references');
+  const add=(parent,tag,text)=>{
+    const element=document.createElement(tag);
+    element.textContent=text;
+    parent.appendChild(element);
+    return element;
+  };
+  add(panel,'h3','Base rates from your Excel file');
+  if(!reference || reference.status!=='ok'){
+    add(panel,'p','References unavailable. Check that Taxi Pricing.xlsx is in the app folder.');
+    return;
+  }
+  const matches=reference.matches || [];
+  const notes=reference.pickup_notes || [];
+  if(!matches.length && !notes.length){
+    add(panel,'p','No matching base-rate reference found for these addresses.');
+    return;
+  }
+  add(panel,'p','Reference only. Confirm the listed route and choose the schedule that applies to this trip.');
+  if(matches.length){
+    const table=document.createElement('table');
+    panel.appendChild(table);
+    const header=document.createElement('tr');
+    table.appendChild(header);
+    ['Schedule','Listed route','Sedan','SUV'].forEach(label=>add(header,'th',label));
+    matches.forEach(rate=>{
+      const row=document.createElement('tr');
+      table.appendChild(row);
+      add(row,'td',rate.schedule);
+      const route=add(row,'td',rate.route);
+      add(route,'small',rate.match);
+      if(rate.shared_rate!=null){
+        const cell=add(row,'td',`$${money(rate.shared_rate)} (Sedan/SUV as listed)`);
+        cell.colSpan=2;
+      }else{
+        ['sedan','suv'].forEach(vehicle=>{
+          const cell=add(row,'td',rate[vehicle]==null ? 'Not listed' : `$${money(rate[vehicle])}`);
+          if(vehicle===trip.vehicle) cell.className='selected-vehicle';
+        });
+      }
+    });
+  }
+  notes.forEach(note=>{
+    add(panel,'h4',`${note.heading} — ${note.base}`);
+    const list=document.createElement('ul');
+    panel.appendChild(list);
+    note.items.forEach(item=>add(list,'li',item));
+  });
+  const source=add(panel,'p',`Source: ${reference.source}. Airport area matches should be confirmed.`);
+  source.className='hint';
 }
 
 function showMap(data){

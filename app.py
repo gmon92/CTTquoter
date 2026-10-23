@@ -11,6 +11,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from quote_engine import calculate_quote
+from base_rates import find_reference_rates
 from tomtom_client import calculate_route
 
 HOME = (38.0360439, -78.4914661)  # 910 Anderson St., Charlottesville
@@ -118,6 +119,7 @@ def make_quote(payload):
         "full_cycle": full,
         "one_way": one_way,
         "home_base": "910 Anderson St., Charlottesville, VA",
+        "base_rate_reference": find_reference_rates(pickup, destination, pickup_point, destination_point),
     })
     return result
 
