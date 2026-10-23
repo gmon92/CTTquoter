@@ -44,6 +44,13 @@ let map = null;
 let mapLayers = [];
 const money = value => Number(value).toFixed(2);
 
+function formatDuration(minutes){
+  const totalMinutes=Math.round(Number(minutes));
+  const hours=Math.floor(totalMinutes/60);
+  const remainingMinutes=totalMinutes%60;
+  return `${hours} ${hours===1 ? 'hr' : 'hrs'} ${remainingMinutes} min`;
+}
+
 async function calculateTrip(){
   if(map){map.remove();map=null;mapLayers=[];}
   const out=document.getElementById('out');
@@ -63,8 +70,8 @@ async function calculateTrip(){
     out.innerHTML=`<section class="result">
       <h2>Trip estimate</h2>
       <div id="map" aria-label="TomTom route map"></div>
-      <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${data.full_cycle.minutes} minutes</div>
-      <div><b>Customer one-way route:</b> ${data.one_way.miles} miles / ${data.one_way.minutes} minutes</div>
+      <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${formatDuration(data.full_cycle.minutes)}</div>
+      <div><b>Customer one-way route:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
       <p class="hint">Change any one of the three values below. The other two will update to match the same quote.</p>
       <div class="rates">
         <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="syncValues('hourly_rate')"></label>
