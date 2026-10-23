@@ -53,6 +53,8 @@ The key is read from `.env` or the environment and is never shown in the browser
 
 ## Current behavior
 
+For private access from phones using a Cloudflare Tunnel and approved email logins, follow [the Cloudflare setup guide](CLOUDFLARE_SETUP.md). The host computer must stay awake and run both the app and connector.
+
 - Geocodes pickup and destination with TomTom Search API.
 - Calculates the full driver cycle: 910 Anderson → pickup → destination → 910 Anderson.
 - Calculates the one-way customer route separately.
