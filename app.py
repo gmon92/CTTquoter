@@ -9,17 +9,29 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, parse_qs
 from urllib.request import Request, urlopen
 
 from address_aliases import resolve_address
 from quote_engine import calculate_quote
 from base_rates import find_trip_reference_rates
 from tomtom_client import calculate_route
+from pricing import reprice_quote
+from employee_access import EmployeeAccess, OPEN_ACCESS
 
 HOME = (38.0360439, -78.4914661)  # 910 Anderson St., Charlottesville
 SEARCH_URL = "https://api.tomtom.com/search/2/geocode/{}.json?key={}"
 APP_DIR = Path(__file__).resolve().parent
+PWA_FILES = {
+    "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
+    "/pwa.js": ("static/pwa.js", "text/javascript; charset=utf-8"),
+    "/offline.html": ("static/offline.html", "text/html; charset=utf-8"),
+    **{f"/icons/{name}": (f"static/icons/{name}", content_type) for name, content_type in (
+        ("icon-192.png", "image/png"), ("icon-512.png", "image/png"),
+        ("maskable-512.png", "image/png"), ("apple-touch-icon.png", "image/png"),
+        ("icon.svg", "image/svg+xml"))},
+}
 
 
 def load_env_file(path):
@@ -186,19 +198,46 @@ def make_quote(payload):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status, body, content_type="application/json"):
+    @property
+    def access(self):
+        return getattr(self.server, "employee_access", OPEN_ACCESS)
+
+    def _send(self, status, body, content_type="application/json", headers=None):
         raw = body if isinstance(body, bytes) else body.encode()
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "DENY")
+        if self.access.origin:
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(raw)
 
     def do_GET(self):
+        path = urlsplit(self.path).path
+        if path in PWA_FILES:
+            filename, content_type = PWA_FILES[path]
+            headers = {"Service-Worker-Allowed": "/"} if path == "/sw.js" else None
+            self._send(200, (APP_DIR / filename).read_bytes(), content_type, headers)
+            return
+        if path == "/login":
+            if not self.access.enabled or self.access.authorized(self.headers.get("Cookie")):
+                self._send(303, "", headers={"Location": "/"})
+            else:
+                self._send(200, (APP_DIR / "static/login.html").read_bytes(), "text/html; charset=utf-8")
+            return
+        if path != "/health" and not self._require_access():
+            return
         if self.path in ("/", "/index.html"):
-            with open(APP_DIR / "index.html", "rb") as f:
-                self._send(200, f.read(), "text/html; charset=utf-8")
+            page = (APP_DIR / "index.html").read_text(encoding="utf-8")
+            sign_out = '<form action="/logout" method="post"><button class="secondary" type="submit">Sign out</button></form>' if self.access.enabled else ''
+            self._send(200, page.replace("<!-- employee-sign-out -->", sign_out), "text/html; charset=utf-8")
         elif self.path == "/health":
             self._send(200, '{"status":"ok"}')
         elif self.path.startswith("/api/tiles/") and self.path.endswith(".png"):
@@ -216,14 +255,69 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, '{"error":"not found"}')
 
+    def _require_access(self):
+        if self.access.authorized(self.headers.get("Cookie")):
+            return True
+        if self.path.startswith("/api/"):
+            self._send(401, '{"error":"Your session has expired. Sign in again to continue."}')
+        else:
+            self._send(303, "", headers={"Location": "/login"})
+        return False
+
+    def _same_origin(self):
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host", "")
+        # Existing unlisted HTTPS deployments need no new configuration. When
+        # login is enabled publicly, the explicit HTTPS origin is authoritative.
+        allowed = {self.access.origin} if self.access.origin else {f"http://{host}", f"https://{host}"}
+        return ((origin is None or origin in allowed)
+                and self.headers.get("Sec-Fetch-Site") != "cross-site")
+
+    def _read_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if not 0 < length <= 131072:
+            raise ValueError("Request body must be between 1 and 131072 bytes")
+        return self.rfile.read(length)
+
     def do_POST(self):
-        if self.path != "/api/quote":
+        if not self._same_origin():
+            self._send(403, '{"error":"Requests must come from the quoter website."}')
+            return
+        if self.path == "/login":
+            if not self.access.enabled:
+                self._send(303, "", headers={"Location": "/"})
+                return
+            try:
+                form = parse_qs(self._read_body().decode())
+                token, limited = self.access.login(form.get("password", [""])[0], self.client_address[0])
+                if token:
+                    self._send(303, "", headers={"Location": "/", "Set-Cookie": self.access.cookie(token)})
+                else:
+                    message = "Too many attempts. Wait a minute and try again." if limited else "Incorrect password. Please try again."
+                    page = (APP_DIR / "static/login.html").read_text(encoding="utf-8").replace("<!-- login-error -->", message)
+                    self._send(429 if limited else 401, page, "text/html; charset=utf-8")
+            except (ValueError, UnicodeError):
+                self._send(400, '{"error":"Invalid sign-in request"}')
+            return
+        if not self._require_access():
+            return
+        if self.path == "/logout":
+            self.access.logout(self.headers.get("Cookie"))
+            self._send(303, "", headers={"Location": "/login", "Set-Cookie": self.access.cookie("", clear=True)})
+            return
+        if self.path not in ("/api/quote", "/api/reprice"):
             self._send(404, '{"error":"not found"}')
             return
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length))
-            self._send(200, json.dumps(make_quote(payload)))
+            if (self.path == "/api/reprice"
+                    and self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json"):
+                self._send(415, '{"error":"Send JSON to the quote API."}')
+                return
+            payload = json.loads(self._read_body())
+            if not isinstance(payload, dict):
+                raise ValueError("Expected a JSON object")
+            result = make_quote(payload) if self.path == "/api/quote" else reprice_quote(payload)
+            self._send(200, json.dumps(result, allow_nan=False))
         except AddressErrors as exc:
             self._send(400, json.dumps({"error": str(exc), "field_errors": exc.fields}))
         except HTTPError as exc:
@@ -251,7 +345,9 @@ def server_settings(environ=None):
 
 def main():
     host, port, open_browser = server_settings()
+    access = EmployeeAccess.from_environment(host)
     server = ThreadingHTTPServer((host, port), Handler)
+    server.employee_access = access
     print(f"Charlottesville Transportation Quoter listening on {host}:{port}", flush=True)
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow"><meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CTT Quoter">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<title>CTT Quoter — Employee sign-in</title>
+<style>body{font:16px system-ui;background:#f5f5f5;color:#171717;margin:0;padding:env(safe-area-inset-top) 20px env(safe-area-inset-bottom)}main{max-width:420px;margin:10vh auto;background:white;padding:24px;border-radius:12px}input,button{box-sizing:border-box;width:100%;font:inherit;min-height:48px;padding:12px;border:1px solid #bbb;border-radius:6px;margin-top:10px}button{background:#111;color:white;cursor:pointer}.error{color:#a00}label{font-weight:600}</style>
+</head><body><main>
+<h1>CTT Quoter</h1><p>Employee sign-in</p>
+<form action="/login" method="post">
+<input type="text" name="username" value="CTT employee" autocomplete="username" hidden>
+<label for="password">Team password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+<p class="error" role="alert"><!-- login-error --></p>
+<button type="submit">Sign in</button>
+</form>
+<p>Your session lasts up to 8 hours. Ask your administrator for access.</p>
+</main></body></html>

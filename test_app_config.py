@@ -36,7 +36,8 @@ class LocalEnvTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder) / 'project'
             project.mkdir()
-            for name in ('app.py', 'quote_engine.py', 'tomtom_client.py', 'base_rates.py', 'address_aliases.py'):
+            for name in ('app.py', 'quote_engine.py', 'tomtom_client.py', 'base_rates.py', 'address_aliases.py',
+                         'pricing.py', 'employee_access.py'):
                 shutil.copy(Path(__file__).resolve().parent / name, project / name)
             (project / '.env').write_text('CTT_ENV_PROJECT_TEST_KEY=from-project-file\n', encoding='utf-8')
             code = (
