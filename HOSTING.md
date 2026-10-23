@@ -16,7 +16,7 @@ The blueprint supplies the start command, public listening address, health endpo
 
 ## Using it from phones
 
-Everyone uses the Render address in their browser and can add it to their home screen. The server supplies routing and reference rates; each browser has its own quote controls.
+Everyone uses the Render address in their browser and can install it on their home screen. See [iPhone installation and employee access](PWA.md). The server supplies routing and all pricing calculations; each browser has its own quote controls. Enabling team sign-in and deploying this PWA branch require approval first.
 
 The Free plan is intended for a trial. Render currently spins free web services down after 15 minutes without traffic; opening the app again can take about a minute while it wakes. A paid instance can avoid the idle wake-up delay if you later want that.
 

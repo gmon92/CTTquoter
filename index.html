@@ -2,31 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CTT Quoter">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
 <title>Cville Transportation Quoter</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-body{font:16px system-ui;max-width:820px;margin:30px auto;padding:0 18px;background:#f5f5f5;color:#171717}
-main{background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 10px #ddd}
+*{box-sizing:border-box}
+body{font:16px/1.5 system-ui;max-width:860px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));background:#f5f5f5;color:#171717;overflow-wrap:anywhere}
+main{background:#fff;padding:16px;border-radius:12px;box-shadow:0 2px 10px #ddd;min-width:0}
+h1{font-size:clamp(1.5rem,5vw,2rem);line-height:1.2}
 label{display:block;margin-top:12px;font-weight:600}
-input,select,textarea{width:100%;box-sizing:border-box;padding:10px;margin-top:5px;font:inherit;border:1px solid #bbb;border-radius:5px}
-button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;border-radius:6px;font:inherit;cursor:pointer}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input,select,textarea{width:100%;min-width:0;min-height:48px;padding:12px;margin-top:5px;font:inherit;font-size:16px;border:1px solid #bbb;border-radius:5px}
+button{min-height:48px;margin-top:18px;padding:12px 18px;background:#111;color:#fff;border:0;border-radius:6px;font:inherit;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.6;cursor:wait}
+:focus-visible{outline:3px solid #1665d8;outline-offset:3px}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+.grid>div{min-width:0}
 .result{margin-top:22px;padding:16px;background:#f0f7ff;border-radius:8px}
-#map{height:380px;margin-top:12px;border-radius:8px;background:#e8edf0}
-.rates{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+#map{height:260px;height:clamp(220px,35svh,380px);margin-top:12px;border-radius:8px;background:#e8edf0}
+.rates{display:grid;grid-template-columns:1fr;gap:16px;margin-top:14px}
+.rates input[type=number]{font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{padding:0;min-height:48px;accent-color:#1665d8;touch-action:pan-y}
 .rates label{margin-top:0}
 .hint{font-size:.92rem;color:#444}
 .base-reference{margin-top:18px;padding:14px;background:#fff9e6;border:1px solid #e4cd89;border-radius:8px;overflow-x:auto}
 .base-reference h3{margin:0 0 8px}
-.base-reference table{width:100%;border-collapse:collapse;font-size:.92rem}
+.base-reference table{width:100%;min-width:480px;border-collapse:collapse;font-size:.92rem}
 .base-reference th,.base-reference td{padding:9px 7px;text-align:left;border-bottom:1px solid #e4cd89;vertical-align:top}
 .base-reference .selected-vehicle{font-weight:700;background:#fff0bd}
+.base-reference td:nth-last-child(-n+2){white-space:nowrap}
+.base-reference>section{overflow-x:auto}
+.base-reference summary{font-weight:600;padding:0;display:flex;align-items:center}
+.base-reference summary::before{content:'▸';margin-right:8px}
+.base-reference[open] summary::before{content:'▾'}
 .base-reference small{display:block;color:#555;margin-top:4px}
 .error{color:#a00}
-.option-toggle{display:flex;align-items:center;gap:9px;font-weight:500}
-.option-toggle input{width:auto;margin:0;flex:none}
+.option-toggle{display:flex;align-items:center;gap:12px;font-weight:500;min-height:48px;cursor:pointer}
+.option-toggle input{width:24px;height:24px;min-height:24px;margin:0;flex:none;accent-color:#1665d8}
 .optional-fields{margin-top:10px;padding:12px;background:#f5f5f5;border-radius:6px}
 .stop-row{display:flex;align-items:flex-end;gap:10px;margin-bottom:10px}
 .stop-row label{flex:1;min-width:0;margin:0}
@@ -36,17 +55,29 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 .tip-total{margin-top:16px;padding:16px;background:#e9f8ed;border:1px solid #9ac6a5;border-radius:6px}
 .tip-total h2{margin-bottom:0}
 .compare-scroll{overflow-x:auto}
+.fare-summary{margin:12px 0 20px;padding:16px;background:white;border-radius:8px;border:1px solid #ccd8e5}
+.fare-summary strong{display:block;font-size:clamp(2rem,9vw,3rem);line-height:1.2;font-variant-numeric:tabular-nums}
+.connection-status{padding:12px;border:1px solid #e4cd89;background:#fff9e6;border-radius:6px}
+summary{min-height:48px;padding:12px 0;cursor:pointer}
+.account{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.account button{margin:0}
+#calculate_button{width:100%;font-weight:700}
 .compare-table{border-collapse:collapse;width:100%;margin-top:12px}
 .compare-table th,.compare-table td{min-width:190px;padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #ccd8e5;white-space:pre-line;overflow-wrap:anywhere}
 .compare-table th:first-child{min-width:130px}
 .compare-table input{margin:0}
 .compare-table button{margin-top:8px}
-@media(max-width:650px){.grid,.rates{grid-template-columns:1fr}}
+@media(min-width:651px){body{padding:30px 18px}main{padding:24px}.grid{grid-template-columns:1fr 1fr}.rates{grid-template-columns:repeat(3,minmax(0,1fr))}#calculate_button{width:auto}}
+@media(max-width:380px){.stop-row{flex-wrap:wrap}.stop-row label{flex-basis:100%}.result{padding:12px}}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
 <h1>Charlottesville Transportation Quoter</h1>
+<p id="connection_status" class="connection-status" role="status" hidden></p>
+<details id="install_help"><summary>Install on your iPhone</summary><p>Open this HTTPS address in Safari. Tap Share, choose <b>Add to Home Screen</b>, keep <b>Open as Web App</b> enabled if shown, then tap Add. Open CTT Quoter from its new icon.</p><p>A connection is required for routes and prices. Quotes and comparisons clear when the page reloads.</p></details>
+<p id="install_status" class="hint" role="status"></p>
 <p>Enter the trip details, then edit the hourly rate, one-way mileage rate, or quote. The last value you change recalculates the other two.</p>
 <label>Customer request / notes<textarea id="notes" rows="4" placeholder="Paste an email or text here for reference"></textarea></label>
 <div class="grid">
@@ -71,7 +102,7 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 <label class="option-toggle"><input id="include_charge" type="checkbox" onchange="toggleAdditionalCharge()">Add a dollar amount to the quote</label>
 <div id="charge_fields" class="optional-fields" hidden>
   <label for="additional_charge">Additional charge ($)</label>
-  <input id="additional_charge" type="number" min="0" step="0.01" value="0" disabled oninput="syncValues('additional_charge')">
+  <input id="additional_charge" type="number" inputmode="decimal" min="0" step="0.01" value="0" disabled oninput="schedulePricing('additional_charge')">
 </div>
 <label class="option-toggle"><input id="include_tip" type="checkbox" onchange="updateTip()">Add 20% tip (all-inclusive price)</label>
 </div>
@@ -82,7 +113,11 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
   <div id="comparison_table" class="compare-scroll"></div>
 </section>
 <p id="comparison_status" class="hint" role="status"></p>
+<p id="pricing_status" class="hint" role="status"></p>
+<button id="retry_pricing" class="secondary" type="button" onclick="retryPricing()" hidden>Retry price update</button>
+<div class="account"><span class="hint">CTT Quoter</span><!-- employee-sign-out --></div>
 </main>
+<script src="/pwa.js" defer></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let trip = null;
@@ -95,6 +130,13 @@ let comparisonCounter = 0;
 let calculationVersion = 0;
 let addressErrorInputs = [];
 let calculatedPickupTime = '';
+let currentPricing = null;
+let pricingQueue = Promise.resolve();
+let pricingSequence = 0;
+let pricingPending = false;
+let pricingTimer = null;
+let pendingPricingEdit = null;
+let lastPricingSource = 'additional_charge';
 const money = value => Number(value).toFixed(2);
 
 function formatDuration(minutes){
@@ -144,7 +186,7 @@ function customerStops(){
 function additionalCharge(){
   if(!document.getElementById('include_charge').checked) return 0;
   const value=Number(document.getElementById('additional_charge').value);
-  return Number.isFinite(value) && value>=0 ? Math.round(value*100)/100 : null;
+  return Number.isFinite(value) && value>=0 ? value : null;
 }
 
 function toggleAdditionalCharge(){
@@ -154,34 +196,29 @@ function toggleAdditionalCharge(){
   syncValues('additional_charge');
 }
 
-function renderPriceBreakdown(total,charge){
+function renderPriceBreakdown(data){
   const breakdown=document.getElementById('price_breakdown');
   if(!breakdown) return;
   breakdown.hidden=!document.getElementById('include_charge').checked;
-  document.getElementById('trip_price_text').textContent=money(tripPrice);
-  document.getElementById('charge_text').textContent=money(charge);
-  document.getElementById('total_text').textContent=money(total);
+  document.getElementById('trip_price_text').textContent=money(data.trip_price);
+  document.getElementById('charge_text').textContent=money(data.additional_charge);
+  document.getElementById('total_text').textContent=money(data.quote);
 }
 
 function updateTip(){
-  if(!trip) return;
-  const quote=document.getElementById('final_quote');
-  if(!quote) return;
-  renderTipBreakdown(quote.value.trim()==='' ? null : Number(quote.value));
+  return syncValues('additional_charge');
 }
 
-function renderTipBreakdown(total){
+function renderTipBreakdown(data){
   const breakdown=document.getElementById('tip_breakdown');
   if(!breakdown) return;
-  const enabled=document.getElementById('include_tip').checked;
+  const enabled=data.include_tip;
   breakdown.hidden=!enabled;
   document.getElementById('quote_label').textContent=enabled ? 'Quote before tip ($)' : 'Final quote ($)';
   document.getElementById('calculated_quote_label').textContent=enabled ? 'Quote before tip' : 'Final quote';
-  if(total===null || !Number.isFinite(total) || total<0){breakdown.hidden=true;return;}
-  const tip=Math.round(Math.round(total*100)/5)/100;
-  document.getElementById('before_tip_text').textContent=money(total);
-  document.getElementById('tip_text').textContent=money(tip);
-  document.getElementById('all_inclusive_text').textContent=money(Math.round((total+tip)*100)/100);
+  document.getElementById('before_tip_text').textContent=money(data.quote);
+  document.getElementById('tip_text').textContent=money(data.tip_amount);
+  document.getElementById('all_inclusive_text').textContent=money(data.all_inclusive_price);
 }
 
 function clearAddressErrors(){
@@ -216,7 +253,15 @@ async function calculateTrip(){
   clearAddressErrors();
   const stopInputs=document.getElementById('include_stops').checked ? Array.from(document.querySelectorAll('.extra-stop-address')).filter(input=>input.value.trim()) : [];
   button.disabled=true;
+  button.setAttribute('aria-busy','true');
   const version=++calculationVersion;
+  clearTimeout(pricingTimer);
+  pendingPricingEdit=null;
+  ++pricingSequence;
+  currentPricing=null;
+  pricingPending=false;
+  document.getElementById('pricing_status').textContent='';
+  document.getElementById('retry_pricing').hidden=true;
   trip=null;
   if(map){map.remove();map=null;mapLayers=[];}
   const out=document.getElementById('out');
@@ -233,30 +278,26 @@ async function calculateTrip(){
     pickup_time:localTime ? new Date(localTime).toISOString() : ''
   };
   try{
-    const response=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const data=await response.json();
+    const data=await postJSON('/api/quote',payload);
     if(version!==calculationVersion) return;
-    if(!response.ok){
-      showAddressErrors(data.field_errors,stopInputs);
-      throw new Error(data.error || 'Could not calculate route');
-    }
     trip=data;
     calculatedPickupTime=localTime;
     tripPrice=data.trip_price;
     out.innerHTML=`<section class="result">
       <h2>Trip estimate</h2>
+      <div class="fare-summary" aria-live="polite"><span id="fare_caption">Final quote</span><strong id="fare_total"></strong></div>
       <div id="map" aria-label="TomTom route map"></div>
       <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${formatDuration(data.full_cycle.minutes)}</div>
       <div><b>Customer ${data.stops.length ? 'route with all stops' : 'one-way route'}:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
       <ol id="customer_itinerary" hidden></ol>
-      <section id="base_rate_references" class="base-reference" aria-label="Base rate references"></section>
+      <details id="base_rate_details" class="base-reference"><summary id="base_rate_summary">Excel base-rate references</summary><section id="base_rate_references" aria-label="Base rate references"></section></details>
       <p class="hint">Change any one of the three values below. The other two will update to match the same quote.</p>
       <div class="rates">
-        <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="syncValues('hourly_rate')"></label>
-        <label for="mileage_rate">Customer mileage rate ($/mile)<input id="mileage_rate" type="number" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="syncValues('mileage_rate')"></label>
-        <label for="final_quote"><span id="quote_label">Final quote ($)</span><input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
+        <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" inputmode="decimal" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="schedulePricing('hourly_rate')"></label>
+        <label for="mileage_rate">Customer mileage rate ($/mile)<input id="mileage_rate" type="number" inputmode="decimal" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="schedulePricing('mileage_rate')"></label>
+        <label for="final_quote"><span id="quote_label">Final quote ($)</span><input id="final_quote" type="number" inputmode="decimal" min="0" step="0.01" value="${money(data.quote)}" oninput="schedulePricing('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="schedulePricing('quote_slider')"></label>
       </div>
-      <button type="button" onclick="addComparison()">Add to comparison</button>
+      <button id="add_comparison" type="button" onclick="addComparison()">Add to comparison</button>
       <p class="hint">Save this option, then adjust the rates or calculate a different trip to compare.</p>
       <div id="pricing_options_slot"></div>
       <div id="price_breakdown" class="price-breakdown" hidden>
@@ -280,11 +321,15 @@ async function calculateTrip(){
         itinerary.appendChild(item);
       });
     }
-    syncValues('additional_charge');
+    applyPricing(data);
+    if(additionalCharge()!==payload.additional_charge || document.getElementById('include_tip').checked!==payload.include_tip) syncValues('additional_charge');
     renderBaseRateReferences(data.base_rate_reference);
+    document.getElementById('base_rate_details').open=window.matchMedia('(min-width:651px)').matches;
     showMap(data);
+    if(window.matchMedia('(max-width:650px)').matches) out.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(error){
     if(version!==calculationVersion) return;
+    showAddressErrors(error.field_errors,stopInputs);
     trip=null;
     parkPricingOptions();
     out.innerHTML='';
@@ -293,7 +338,7 @@ async function calculateTrip(){
     message.textContent=error.message;
     out.appendChild(message);
   }finally{
-    if(version===calculationVersion) button.disabled=false;
+    if(version===calculationVersion){button.disabled=false;button.setAttribute('aria-busy','false');}
   }
 }
 
@@ -303,19 +348,19 @@ function addComparison(){
   const quote=document.getElementById('final_quote');
   const total=Number(quote.value);
   const charge=additionalCharge();
-  if(quote.value.trim()==='' || !Number.isFinite(total) || total<0 || charge===null){
+  if(pricingPending || !currentPricing || quote.value.trim()==='' || !Number.isFinite(total) || total<0 || charge===null){
     document.getElementById('comparison_status').textContent='Enter a valid quote and additional charge before comparing.';
     return;
   }
-  const tip=document.getElementById('include_tip').checked ? Math.round(Math.round(total*100)/5)/100 : 0;
+  const price=currentPricing;
   const id=++comparisonCounter;
   comparisons.push({id,name:`Option ${id}`,pickup:trip.pickup,destination:trip.destination,
     stops:(trip.stops || []).map(stop=>stop.address),vehicle:trip.vehicle,
     pickupTime:calculatedPickupTime,minutes:trip.full_cycle.minutes,miles:trip.one_way.miles,
     customerMinutes:trip.one_way.minutes,driverMiles:trip.full_cycle.miles,
-    total,charge,tip,includeTip:document.getElementById('include_tip').checked,
-    hourly:trip.full_cycle.minutes ? total/(trip.full_cycle.minutes/60) : 0,
-    mileage:trip.one_way.miles ? total/trip.one_way.miles : 0});
+    total:price.quote,charge:price.additional_charge,tip:price.tip_amount,tripPrice:price.trip_price,
+    allInclusive:price.all_inclusive_price,includeTip:price.include_tip,
+    hourly:price.hourly_rate,mileage:price.mileage_rate});
   renderComparisons();
   document.getElementById('comparison_status').textContent=`Option ${id} added to comparison.`;
 }
@@ -373,11 +418,11 @@ function renderComparisons(){
     ['Customer route',o=>`${o.miles} miles / ${formatDuration(o.customerMinutes)}`],
     ['Hourly rate',o=>`$${money(o.hourly)}/hr`],
     ['Mileage rate',o=>`$${money(o.mileage)}/mile`],
-    ['Trip price',o=>`$${money(o.total-o.charge)}`],
+    ['Trip price',o=>`$${money(o.tripPrice)}`],
     ['Additional charge',o=>`$${money(o.charge)}`],
     ['Quote before tip',o=>`$${money(o.total)}`],
     ['20% tip',o=>o.includeTip ? `$${money(o.tip)}` : 'Not included'],
-    ['Total',o=>`$${money(o.total+o.tip)}`]
+    ['Total',o=>`$${money(o.allInclusive)}`]
   ];
   rows.forEach(([label,value])=>{
     const row=document.createElement('tr');
@@ -403,6 +448,13 @@ function parkPricingOptions(){
 function startNewQuote(){
   clearAddressErrors();
   ++calculationVersion;
+  ++pricingSequence;
+  clearTimeout(pricingTimer);
+  pendingPricingEdit=null;
+  currentPricing=null;
+  pricingPending=false;
+  document.getElementById('pricing_status').textContent='';
+  document.getElementById('retry_pricing').hidden=true;
   trip=null;
   tripPrice=0;
   calculatedPickupTime='';
@@ -420,6 +472,7 @@ function startNewQuote(){
   parkPricingOptions();
   document.getElementById('out').replaceChildren();
   document.getElementById('calculate_button').disabled=false;
+  document.getElementById('calculate_button').setAttribute('aria-busy','false');
   clearComparisons();
   document.getElementById('comparison_status').textContent='Ready for a new quote.';
   document.getElementById('pickup').focus();
@@ -427,6 +480,9 @@ function startNewQuote(){
 
 function renderBaseRateReferences(reference){
   const panel=document.getElementById('base_rate_references');
+  const count=(reference?.matches || []).length;
+  document.getElementById('base_rate_summary').textContent=reference?.status==='ok' ?
+    `Excel base rates: ${count} ${count===1 ? 'match' : 'matches'}${reference.pickup_notes?.length ? ' · pickup notes available' : ''}` : 'Excel base rates unavailable';
   const add=(parent,tag,text)=>{
     const element=document.createElement(tag);
     element.textContent=text;
@@ -513,36 +569,115 @@ function showMap(data){
   window.setTimeout(()=>map.invalidateSize(),0);
 }
 
-function syncValues(source){
-  if(!trip) return;
-  const charge=additionalCharge();
-  if(charge===null) return;
-  const hours=Number(trip.full_cycle.minutes)/60;
-  const miles=Number(trip.one_way.miles);
-  const hourly=document.getElementById('hourly_rate');
-  const mileage=document.getElementById('mileage_rate');
-  const quote=document.getElementById('final_quote');
-  const edited=source==='quote' ? quote : document.getElementById(source);
-  if(source!=='additional_charge' && edited.value.trim()==='') return;
-  const value=Number(edited.value);
-  if(source!=='additional_charge' && (!Number.isFinite(value)||value<0)) return;
-  let finalQuote;
-  if(source==='additional_charge') finalQuote=tripPrice+charge;
-  else if(source==='hourly_rate') finalQuote=value*hours;
-  else if(source==='mileage_rate') finalQuote=value*miles;
-  else finalQuote=value;
-  const enteredQuote=finalQuote;
-  finalQuote=Math.round(Math.max(finalQuote,charge)*100)/100;
-  tripPrice=Math.round((finalQuote-charge)*100)/100;
-  if(edited!==quote || enteredQuote<charge) quote.value=money(finalQuote);
-  if(edited!==hourly || enteredQuote<charge) hourly.value=hours ? money(finalQuote/hours) : '0.00';
-  if(edited!==mileage || enteredQuote<charge) mileage.value=miles ? money(finalQuote/miles) : '0.00';
+async function postJSON(path,payload){
+  let response;
+  try{
+    response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});
+  }catch(error){throw new Error('Could not reach the server. Reconnect and try again.');}
+  if(response.status===401){
+    document.getElementById('pricing_status').innerHTML='Session expired. <a href="/login">Sign in again</a>.';
+  }
+  let data;
+  try{data=await response.json();}catch(error){throw new Error('The server is unavailable. Please try again.');}
+  if(!response.ok){const error=new Error(data.error || 'Could not calculate quote');error.field_errors=data.field_errors;throw error;}
+  return data;
+}
+
+function applyPricing(data,source=null){
+  currentPricing=data;
+  tripPrice=data.trip_price;
+  const fields={hourly_rate:'hourly_rate',mileage_rate:'mileage_rate',quote:'final_quote'};
+  Object.entries(fields).forEach(([key,id])=>{
+    if(source!==key || data.clamped) document.getElementById(id).value=money(data[key==='quote' ? 'quote' : key]);
+  });
   const slider=document.getElementById('quote_slider');
-  if(finalQuote>Number(slider.max)) slider.max=Math.ceil(finalQuote*2);
-  slider.min=charge;
-  slider.value=finalQuote;
-  renderPriceBreakdown(finalQuote,charge);
-  renderTipBreakdown(finalQuote);
+  if(data.quote>Number(slider.max)) slider.max=Math.ceil(data.quote*2);
+  slider.min=data.additional_charge;
+  slider.value=data.quote;
+  renderPriceBreakdown(data);
+  renderTipBreakdown(data);
+  document.getElementById('fare_caption').textContent=data.include_tip ? 'All-inclusive price (20% tip included)' : 'Final quote';
+  document.getElementById('fare_total').textContent=`$${money(data.all_inclusive_price)}`;
+}
+
+function markPricingPending(){
+  pricingPending=true;
+  const button=document.getElementById('add_comparison');
+  if(button) button.disabled=true;
+  const total=document.getElementById('fare_total');
+  if(total) total.textContent='Updating…';
+  ['price_breakdown','tip_breakdown'].forEach(id=>{const panel=document.getElementById(id);if(panel) panel.hidden=true;});
+  document.getElementById('pricing_status').textContent='Updating price…';
+  document.getElementById('retry_pricing').hidden=true;
+}
+
+function capturePricingEdit(source){
+  const input=source==='quote' ? document.getElementById('final_quote') : document.getElementById(source);
+  const charge=additionalCharge();
+  const valid=charge!==null && (source==='additional_charge' || (input.value.trim()!=='' && Number.isFinite(Number(input.value)) && Number(input.value)>=0));
+  return {source,generation:calculationVersion,valid,payload:{
+    total_driver_minutes:trip.full_cycle.minutes,one_way_miles:trip.one_way.miles,
+    vehicle:trip.vehicle,edited:source,value:source==='additional_charge' ? null : Number(input.value),
+    additional_charge:charge,include_tip:document.getElementById('include_tip').checked}};
+}
+
+function flushPricingEdit(){
+  clearTimeout(pricingTimer);
+  pricingTimer=null;
+  const edit=pendingPricingEdit;
+  pendingPricingEdit=null;
+  if(edit) syncValues(edit.source,edit);
+}
+
+function schedulePricing(source){
+  if(!trip) return;
+  if(pendingPricingEdit && pendingPricingEdit.source!==source) flushPricingEdit();
+  clearTimeout(pricingTimer);
+  ++pricingSequence; // Ignore any earlier response as soon as typing starts.
+  lastPricingSource=source;
+  pendingPricingEdit=capturePricingEdit(source);
+  markPricingPending();
+  pricingTimer=setTimeout(flushPricingEdit,150);
+}
+
+function retryPricing(){return syncValues(lastPricingSource);}
+
+function syncValues(source,edit=null){
+  if(!trip) return Promise.resolve();
+  if(!edit) flushPricingEdit();
+  lastPricingSource=source;
+  const sequence=++pricingSequence;
+  edit=edit || capturePricingEdit(source);
+  const {generation,payload}=edit;
+  if(!edit.valid){
+    markPricingPending();
+    document.getElementById('pricing_status').textContent='Enter a valid amount to update the price.';
+    return Promise.resolve();
+  }
+  markPricingPending();
+  // Serialize edits so a charge following a rate edit uses the server's latest trip price.
+  pricingQueue=pricingQueue.catch(()=>{}).then(async()=>{
+    if(generation!==calculationVersion || !trip) return;
+    const data=await postJSON('/api/reprice',{...payload,trip_price:tripPrice});
+    if(generation!==calculationVersion || !trip) return;
+    tripPrice=data.trip_price;
+    if(sequence!==pricingSequence) return;
+    applyPricing(data,source);
+    pricingPending=false;
+    document.getElementById('add_comparison').disabled=false;
+    document.getElementById('pricing_status').textContent='Price updated.';
+  }).catch(error=>{
+    if(generation!==calculationVersion || sequence!==pricingSequence) return;
+    currentPricing=null;
+    document.getElementById('fare_total').textContent='Price unavailable';
+    document.getElementById('pricing_status').textContent=error.message;
+    if(error.message.includes('session')){
+      const link=document.createElement('a');link.href='/login';link.textContent=' Sign in again';
+      document.getElementById('pricing_status').appendChild(link);
+    }
+    document.getElementById('retry_pricing').hidden=false;
+  });
+  return pricingQueue;
 }
 </script>
 </body>

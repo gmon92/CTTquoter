@@ -2,6 +2,8 @@
 
 Local browser-based taxi quote calculator for manual entry. TomTom Search, Orbis Routing, and map tiles use `TOMTOM_API_KEY`.
 
+For iPhone Home Screen installation, offline behavior, optional employee sign-in, and PWA regression tests, see [the PWA guide](PWA.md). HTTPS hosting and access settings must be approved before production changes.
+
 For an unlisted website hosted independently of your Mac, use [the Render hosting guide](HOSTING.md). Your existing GoDaddy website can stay in place. The repository includes a ready-to-deploy `render.yaml` blueprint.
 
 ## Run on macOS

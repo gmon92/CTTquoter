@@ -1,0 +1,2 @@
+# Optional browser regression tests only. The running app still uses stdlib.
+playwright>=1.50,<2
