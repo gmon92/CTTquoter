@@ -24,6 +24,14 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 .base-reference .selected-vehicle{font-weight:700;background:#fff0bd}
 .base-reference small{display:block;color:#555;margin-top:4px}
 .error{color:#a00}
+.option-toggle{display:flex;align-items:center;gap:9px;font-weight:500}
+.option-toggle input{width:auto;margin:0;flex:none}
+.optional-fields{margin-top:10px;padding:12px;background:#f5f5f5;border-radius:6px}
+.stop-row{display:flex;align-items:flex-end;gap:10px;margin-bottom:10px}
+.stop-row label{flex:1;min-width:0;margin:0}
+.secondary{background:#e6e6e6;color:#171717;margin-top:6px;padding:9px 12px}
+.stop-row button{margin:0}
+.price-breakdown{margin-top:16px;padding:12px;background:#fff;border-radius:6px}
 @media(max-width:650px){.grid,.rates{grid-template-columns:1fr}}
 </style>
 </head>
@@ -34,11 +42,22 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 <label>Customer request / notes<textarea id="notes" rows="4" placeholder="Paste an email or text here for reference"></textarea></label>
 <div class="grid">
   <div><label for="pickup">Pickup address</label><input id="pickup" placeholder="e.g. IAD"></div>
-  <div><label for="destination">Destination</label><input id="destination" placeholder="e.g. 4125 Cannon Brook Way, Charlottesville, VA"></div>
+  <div><label for="destination">Final destination</label><input id="destination" placeholder="e.g. 4125 Cannon Brook Way, Charlottesville, VA"></div>
+</div>
+<label class="option-toggle"><input id="include_stops" type="checkbox" onchange="toggleStops()">Add more customer stops</label>
+<div id="stops_fields" class="optional-fields" hidden>
+  <p class="hint">Stops are visited in the order listed, between pickup and the final destination. Calculate the trip again after changing stops.</p>
+  <div id="stop_list"></div>
+  <button class="secondary" type="button" onclick="addStop()">Add another stop</button>
 </div>
 <div class="grid">
   <div><label for="vehicle">Vehicle</label><select id="vehicle"><option value="sedan">Sedan</option><option value="suv">SUV</option></select></div>
   <div><label for="pickup_time">Customer pickup time (optional)</label><input id="pickup_time" type="datetime-local"></div>
+</div>
+<label class="option-toggle"><input id="include_charge" type="checkbox" onchange="toggleAdditionalCharge()">Add a dollar amount to the quote</label>
+<div id="charge_fields" class="optional-fields" hidden>
+  <label for="additional_charge">Additional charge ($)</label>
+  <input id="additional_charge" type="number" min="0" step="0.01" value="0" disabled oninput="syncValues('additional_charge')">
 </div>
 <button id="calculate_button" type="button" onclick="calculateTrip()">Calculate trip</button>
 <div id="out" aria-live="polite"></div>
@@ -48,6 +67,8 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 let trip = null;
 let map = null;
 let mapLayers = [];
+let tripPrice = 0;
+let stopCounter = 0;
 const money = value => Number(value).toFixed(2);
 
 function formatDuration(minutes){
@@ -57,7 +78,71 @@ function formatDuration(minutes){
   return `${hours} ${hours===1 ? 'hr' : 'hrs'} ${remainingMinutes} min`;
 }
 
+function toggleStops(){
+  const enabled=document.getElementById('include_stops').checked;
+  document.getElementById('stops_fields').hidden=!enabled;
+  if(enabled && !document.querySelector('#stop_list .stop-row')) addStop();
+}
+
+function addStop(){
+  const row=document.createElement('div');
+  row.className='stop-row';
+  const label=document.createElement('label');
+  const name=document.createElement('span');
+  name.className='stop-label';
+  const input=document.createElement('input');
+  input.id=`stop_${++stopCounter}`;
+  input.className='extra-stop-address';
+  input.placeholder='Stop address';
+  label.htmlFor=input.id;
+  label.append(name,input);
+  const remove=document.createElement('button');
+  remove.type='button';
+  remove.className='secondary';
+  remove.textContent='Remove';
+  remove.onclick=()=>{row.remove();renumberStops();};
+  row.append(label,remove);
+  document.getElementById('stop_list').appendChild(row);
+  renumberStops();
+}
+
+function renumberStops(){
+  document.querySelectorAll('#stop_list .stop-label').forEach((label,index)=>label.textContent=`Stop ${index+1}`);
+}
+
+function customerStops(){
+  if(!document.getElementById('include_stops').checked) return [];
+  return Array.from(document.querySelectorAll('.extra-stop-address'),input=>input.value.trim()).filter(Boolean);
+}
+
+function additionalCharge(){
+  if(!document.getElementById('include_charge').checked) return 0;
+  const value=Number(document.getElementById('additional_charge').value);
+  return Number.isFinite(value) && value>=0 ? Math.round(value*100)/100 : null;
+}
+
+function toggleAdditionalCharge(){
+  const enabled=document.getElementById('include_charge').checked;
+  document.getElementById('charge_fields').hidden=!enabled;
+  document.getElementById('additional_charge').disabled=!enabled;
+  syncValues('additional_charge');
+}
+
+function renderPriceBreakdown(total,charge){
+  const breakdown=document.getElementById('price_breakdown');
+  if(!breakdown) return;
+  breakdown.hidden=!document.getElementById('include_charge').checked;
+  document.getElementById('trip_price_text').textContent=money(tripPrice);
+  document.getElementById('charge_text').textContent=money(charge);
+  document.getElementById('total_text').textContent=money(total);
+}
+
 async function calculateTrip(){
+  if(additionalCharge()===null){document.getElementById('additional_charge').reportValidity();return;}
+  const button=document.getElementById('calculate_button');
+  if(button.disabled) return;
+  button.disabled=true;
+  trip=null;
   if(map){map.remove();map=null;mapLayers=[];}
   const out=document.getElementById('out');
   out.textContent='Calculating route...';
@@ -66,6 +151,8 @@ async function calculateTrip(){
     pickup:document.getElementById('pickup').value,
     destination:document.getElementById('destination').value,
     vehicle:document.getElementById('vehicle').value,
+    stops:customerStops(),
+    additional_charge:additionalCharge(),
     pickup_time:localTime ? new Date(localTime).toISOString() : ''
   };
   try{
@@ -73,19 +160,36 @@ async function calculateTrip(){
     const data=await response.json();
     if(!response.ok) throw new Error(data.error || 'Could not calculate route');
     trip=data;
+    tripPrice=data.trip_price;
     out.innerHTML=`<section class="result">
       <h2>Trip estimate</h2>
       <div id="map" aria-label="TomTom route map"></div>
       <div><b>Full driver cycle:</b> ${data.full_cycle.miles} miles / ${formatDuration(data.full_cycle.minutes)}</div>
-      <div><b>Customer one-way route:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
+      <div><b>Customer ${data.stops.length ? 'route with all stops' : 'one-way route'}:</b> ${data.one_way.miles} miles / ${formatDuration(data.one_way.minutes)}</div>
+      <ol id="customer_itinerary" hidden></ol>
       <section id="base_rate_references" class="base-reference" aria-label="Base rate references"></section>
       <p class="hint">Change any one of the three values below. The other two will update to match the same quote.</p>
       <div class="rates">
         <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="syncValues('hourly_rate')"></label>
-        <label for="mileage_rate">One-way mileage rate ($/customer mile)<input id="mileage_rate" type="number" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="syncValues('mileage_rate')"></label>
+        <label for="mileage_rate">Customer mileage rate ($/mile)<input id="mileage_rate" type="number" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="syncValues('mileage_rate')"></label>
         <label for="final_quote">Final quote ($)<input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
       </div>
+      <div id="price_breakdown" class="price-breakdown" hidden>
+        Trip price: $<span id="trip_price_text"></span> + additional charge: $<span id="charge_text"></span>
+        <p><b>Final quote: $<span id="total_text"></span></b></p>
+        <p class="hint">Hourly and mileage rates reflect the final quote, including this charge. Editing a rate or quote adjusts the trip price while keeping the charge fixed.</p>
+      </div>
     </section>`;
+    if(data.stops.length){
+      const itinerary=document.getElementById('customer_itinerary');
+      itinerary.hidden=false;
+      [data.pickup,...data.stops.map(stop=>stop.address),data.destination].forEach(address=>{
+        const item=document.createElement('li');
+        item.textContent=address;
+        itinerary.appendChild(item);
+      });
+    }
+    syncValues('additional_charge');
     renderBaseRateReferences(data.base_rate_reference);
     showMap(data);
   }catch(error){
@@ -94,6 +198,8 @@ async function calculateTrip(){
     message.className='error';
     message.textContent=error.message;
     out.appendChild(message);
+  }finally{
+    button.disabled=false;
   }
 }
 
@@ -172,6 +278,7 @@ function showMap(data){
   const stops=[
     {point:data.home_point,label:'Home base'},
     {point:data.pickup_point,label:`Pickup: ${data.pickup}`},
+    ...(data.stops || []).map((stop,index)=>({point:stop.point,label:`Stop ${index+1}: ${stop.address}`})),
     {point:data.destination_point,label:`Destination: ${data.destination}`}
   ];
   stops.forEach(stop=>{
@@ -186,25 +293,33 @@ function showMap(data){
 
 function syncValues(source){
   if(!trip) return;
+  const charge=additionalCharge();
+  if(charge===null) return;
   const hours=Number(trip.full_cycle.minutes)/60;
   const miles=Number(trip.one_way.miles);
   const hourly=document.getElementById('hourly_rate');
   const mileage=document.getElementById('mileage_rate');
   const quote=document.getElementById('final_quote');
   const edited=source==='quote' ? quote : document.getElementById(source);
-  if(edited.value.trim()==='') return;
+  if(source!=='additional_charge' && edited.value.trim()==='') return;
   const value=Number(edited.value);
-  if(!Number.isFinite(value)||value<0) return;
+  if(source!=='additional_charge' && (!Number.isFinite(value)||value<0)) return;
   let finalQuote;
-  if(source==='hourly_rate') finalQuote=value*hours;
+  if(source==='additional_charge') finalQuote=tripPrice+charge;
+  else if(source==='hourly_rate') finalQuote=value*hours;
   else if(source==='mileage_rate') finalQuote=value*miles;
   else finalQuote=value;
-  if(edited!==quote) quote.value=money(finalQuote);
-  if(edited!==hourly) hourly.value=hours ? money(finalQuote/hours) : '0.00';
-  if(edited!==mileage) mileage.value=miles ? money(finalQuote/miles) : '0.00';
+  const enteredQuote=finalQuote;
+  finalQuote=Math.round(Math.max(finalQuote,charge)*100)/100;
+  tripPrice=Math.round((finalQuote-charge)*100)/100;
+  if(edited!==quote || enteredQuote<charge) quote.value=money(finalQuote);
+  if(edited!==hourly || enteredQuote<charge) hourly.value=hours ? money(finalQuote/hours) : '0.00';
+  if(edited!==mileage || enteredQuote<charge) mileage.value=miles ? money(finalQuote/miles) : '0.00';
   const slider=document.getElementById('quote_slider');
   if(finalQuote>Number(slider.max)) slider.max=Math.ceil(finalQuote*2);
+  slider.min=charge;
   slider.value=finalQuote;
+  renderPriceBreakdown(finalQuote,charge);
 }
 </script>
 </body>

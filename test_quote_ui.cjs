@@ -13,10 +13,16 @@ function screen() {
     mileage_rate: { value: '3.50' },
     final_quote: { value: '140.00' },
     quote_slider: { value: '140', max: '280' },
+    include_charge: { checked: false },
+    additional_charge: { value: '0' },
+    price_breakdown: { hidden: true },
+    trip_price_text: {},
+    charge_text: {},
+    total_text: {},
   };
   const context = vm.createContext({document: {getElementById: id => fields[id]}});
   vm.runInContext(script, context);
-  vm.runInContext('trip = {full_cycle: {minutes: 120}, one_way: {miles: 40}};', context);
+  vm.runInContext('trip = {full_cycle: {minutes: 120}, one_way: {miles: 40}}; tripPrice=140;', context);
   return {fields, edit: source => vm.runInContext(`syncValues('${source}')`, context)};
 }
 
@@ -76,4 +82,70 @@ test('entering a larger quote expands the slider range', () => {
   edit('quote');
   assert.ok(Number(fields.quote_slider.max) >= 350);
   assert.equal(Number(fields.quote_slider.value), 350);
+});
+
+test('adding a charge updates the final quote and equivalent rates exactly once', () => {
+  const {fields, edit} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  edit('additional_charge');
+  edit('additional_charge');
+  assert.equal(fields.final_quote.value, '160.00');
+  assert.equal(fields.hourly_rate.value, '80.00');
+  assert.equal(fields.mileage_rate.value, '4.00');
+  assert.equal(fields.trip_price_text.textContent, '140.00');
+  assert.equal(fields.price_breakdown.hidden, false);
+});
+
+test('editing the quote keeps the charge fixed and adjusts the trip price', () => {
+  const {fields, edit} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  edit('additional_charge');
+  fields.final_quote.value = '200';
+  edit('quote');
+  assert.equal(fields.trip_price_text.textContent, '180.00');
+  assert.equal(fields.charge_text.textContent, '20.00');
+  assert.equal(fields.hourly_rate.value, '100.00');
+  fields.include_charge.checked = false;
+  edit('additional_charge');
+  assert.equal(fields.final_quote.value, '180.00');
+  assert.equal(fields.price_breakdown.hidden, true);
+});
+
+test('editing a rate with a charge keeps all three values equivalent', () => {
+  const {fields, edit} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  edit('additional_charge');
+  fields.mileage_rate.value = '5';
+  edit('mileage_rate');
+  assert.equal(fields.final_quote.value, '200.00');
+  assert.equal(fields.hourly_rate.value, '100.00');
+  assert.equal(fields.trip_price_text.textContent, '180.00');
+});
+
+test('the quote cannot go below the additional charge', () => {
+  const {fields, edit} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  edit('additional_charge');
+  fields.final_quote.value = '5';
+  edit('quote');
+  assert.equal(fields.final_quote.value, '20.00');
+  assert.equal(fields.trip_price_text.textContent, '0.00');
+  assert.equal(fields.quote_slider.min, 20);
+});
+
+test('unchecking an invalid charge restores the trip-only quote', () => {
+  const {fields, edit} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  edit('additional_charge');
+  fields.additional_charge.value = '-1';
+  edit('additional_charge');
+  assert.equal(fields.final_quote.value, '160.00');
+  fields.include_charge.checked = false;
+  edit('additional_charge');
+  assert.equal(fields.final_quote.value, '140.00');
 });

@@ -58,6 +58,8 @@ For private access from phones using a Cloudflare Tunnel and approved email logi
 - Geocodes pickup and destination with TomTom Search API.
 - Calculates the full driver cycle: 910 Anderson → pickup → destination → 910 Anderson.
 - Calculates the one-way customer route separately.
+- Optional **Add more customer stops** checkbox reveals extra address fields. Stops are visited in the order entered between pickup and the final destination, and are included in both customer mileage and the full driver cycle. Unchecking the option ignores those stops. Recalculate after editing the route.
+- Optional **Add a dollar amount to the quote** checkbox reveals an additional charge. The quote shows a trip-price-plus-charge breakdown, and the hourly/mileage rates remain equivalent to the final total. Adjusting the charge updates the total live; editing the final quote or either rate adjusts the trip price while keeping the charge fixed. Unchecking the option removes the charge.
 - Displays the routes and stops over TomTom street map tiles. Map tiles are proxied through the local server so the API key stays out of the browser.
 - Accepts a customer pickup time for route estimates.
 - Starts with the vehicle's default hourly rate ($70/hour sedan, $85/hour SUV) and calculates the quote from full driver-cycle time.

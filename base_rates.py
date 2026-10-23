@@ -176,3 +176,27 @@ def find_reference_rates(pickup, destination, pickup_point=None, destination_poi
     except (OSError, BadZipFile, ET.ParseError, KeyError, IndexError, StopIteration, ValueError):
         result.update(status="unavailable", matches=[], pickup_notes=[])
     return result
+
+
+def find_trip_reference_rates(addresses, points, path=WORKBOOK):
+    """Match each customer leg without treating a trip with stops as a direct ride."""
+    if len(addresses) == 2:
+        return find_reference_rates(*addresses, *points, path=path)
+    result = {"source": Path(path).name, "status": "ok", "matches": [], "pickup_notes": []}
+    by_route = {}
+    for index in range(len(addresses) - 1):
+        reference = find_reference_rates(addresses[index], addresses[index + 1],
+                                         points[index], points[index + 1], path=path)
+        if reference["status"] != "ok":
+            return reference
+        if index == 0:
+            result["pickup_notes"] = reference["pickup_notes"]
+        for match in reference["matches"]:
+            key = (match["schedule"], match["route"])
+            reason = f"Leg {index + 1}: {match['match']}"
+            if key in by_route:
+                by_route[key]["match"] += "; " + reason
+            else:
+                by_route[key] = {**match, "match": reason}
+    result["matches"] = list(by_route.values())
+    return result

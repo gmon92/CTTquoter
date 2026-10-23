@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import webbrowser
@@ -11,7 +12,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from quote_engine import calculate_quote
-from base_rates import find_reference_rates
+from base_rates import find_trip_reference_rates
 from tomtom_client import calculate_route
 
 HOME = (38.0360439, -78.4914661)  # 910 Anderson St., Charlottesville
@@ -82,9 +83,22 @@ def fetch_map_tile(z, x, y):
 def make_quote(payload):
     pickup = payload["pickup"].strip()
     destination = payload["destination"].strip()
+    if not pickup or not destination:
+        raise ValueError("Pickup and final destination are required")
+    stops = payload.get("stops", [])
+    if not isinstance(stops, list) or any(not isinstance(stop, str) for stop in stops):
+        raise ValueError("Stops must be a list of addresses")
+    stops = [stop.strip() for stop in stops if stop.strip()]
+    if len(stops) > 148:
+        raise ValueError("A trip can have at most 148 additional stops")
+    additional_charge = float(payload.get("additional_charge") or 0)
+    if not math.isfinite(additional_charge) or additional_charge < 0:
+        raise ValueError("Additional charge must be a non-negative dollar amount")
+    additional_charge = round(additional_charge, 2)
     vehicle = payload.get("vehicle", "sedan")
     pickup_time = payload.get("pickup_time") or None
     pickup_point = geocode(pickup)
+    stop_points = [geocode(stop) for stop in stops]
     destination_point = geocode(destination)
     driver_departure = None
     if pickup_time:
@@ -96,12 +110,13 @@ def make_quote(payload):
     full = calculate_route(
         origin=HOME,
         destination=HOME,
-        waypoints=[pickup_point, destination_point],
+        waypoints=[pickup_point, *stop_points, destination_point],
         depart_at=driver_departure,
     )
     one_way = calculate_route(
         origin=pickup_point,
         destination=destination_point,
+        waypoints=stop_points,
         depart_at=pickup_time,
     )
     result = calculate_quote(
@@ -109,17 +124,26 @@ def make_quote(payload):
         one_way_miles=one_way["miles"],
         vehicle=vehicle,
     )
+    trip_price = result["quote"]
+    final_quote = round(trip_price + additional_charge, 2)
     result.update({
+        "trip_price": trip_price,
+        "additional_charge": additional_charge,
+        "quote": final_quote,
+        "hourly_rate": round(final_quote / (full["minutes"] / 60), 2),
+        "mileage_rate": round(final_quote / one_way["miles"], 2),
         "pickup": pickup,
         "destination": destination,
         "pickup_time": pickup_time,
         "pickup_point": [pickup_point[0], pickup_point[1]],
         "destination_point": [destination_point[0], destination_point[1]],
+        "stops": [{"address": address, "point": list(point)} for address, point in zip(stops, stop_points)],
         "home_point": [HOME[0], HOME[1]],
         "full_cycle": full,
         "one_way": one_way,
         "home_base": "910 Anderson St., Charlottesville, VA",
-        "base_rate_reference": find_reference_rates(pickup, destination, pickup_point, destination_point),
+        "base_rate_reference": find_trip_reference_rates(
+            [pickup, *stops, destination], [pickup_point, *stop_points, destination_point]),
     })
     return result
 
