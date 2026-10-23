@@ -58,6 +58,7 @@ The key is read from `.env` or the environment and is never shown in the browser
 For private access from phones using a Cloudflare Tunnel and approved email logins, follow [the Cloudflare setup guide](CLOUDFLARE_SETUP.md). The host computer must stay awake and run both the app and connector.
 
 - Expands airport shorthand **CHO, IAD, RIC, DCA, BWI, ROA, and LYH** into airport names and street addresses before routing. Codes ignore case and surrounding spaces; `CHO airport` also works. Supported in pickup, destination, and extra stops. Resolved addresses appear in quote results and comparisons.
+- Local shorthand: **BHI** → Boar’s Head Resort (200 Ednam Drive); **Keswick** → Keswick Hall (701 Club Drive); **Farmington** → Farmington Country Club (1625 Country Club Circle). These ignore case and surrounding spaces and work in pickup, destination, and extra stops.
 - Geocodes pickup and destination with TomTom Search API.
 - Calculates the full driver cycle: 910 Anderson → pickup → destination → 910 Anderson.
 - Calculates the one-way customer route separately.

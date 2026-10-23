@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 from urllib.parse import unquote
 
-from address_aliases import AIRPORT_ADDRESSES, resolve_address
+from address_aliases import AIRPORT_ADDRESSES, LOCATION_ADDRESSES, resolve_address
 from app import geocode, make_quote
 
 
@@ -19,6 +19,26 @@ class AddressAliasTests(unittest.TestCase):
         for address in ('123 CHO Road', 'RIC Hotel', 'XYZ', 'Lynchburg'):
             self.assertEqual(resolve_address(address), address)
         self.assertEqual(resolve_address('  910 Anderson St  '), '910 Anderson St')
+
+    def test_local_shortcuts_expand_exact_matches_only(self):
+        for shortcut, address in LOCATION_ADDRESSES.items():
+            for text in (shortcut, f'  {shortcut.lower()}  '):
+                with self.subTest(text=text):
+                    self.assertEqual(resolve_address(text), address)
+            self.assertEqual(resolve_address(address), address)
+        for text in ('123 Farmington Road', 'Keswick Road', 'BHI airport'):
+            self.assertEqual(resolve_address(text), text)
+
+    def test_local_shortcuts_flow_through_pickup_stop_and_destination(self):
+        route = {'minutes': 60, 'miles': 40}
+        with patch('app.geocode', return_value=(38, -78)) as lookup, \
+                patch('app.calculate_route', return_value=route):
+            result = make_quote({'pickup': 'bhi', 'destination': 'farmington', 'stops': ['keswick']})
+        self.assertEqual([call.args[0] for call in lookup.call_args_list],
+                         [LOCATION_ADDRESSES[key] for key in ('BHI', 'KESWICK', 'FARMINGTON')])
+        self.assertEqual(result['pickup'], LOCATION_ADDRESSES['BHI'])
+        self.assertEqual(result['destination'], LOCATION_ADDRESSES['FARMINGTON'])
+        self.assertEqual(result['stops'][0]['address'], LOCATION_ADDRESSES['KESWICK'])
 
     def test_geocoder_searches_expanded_address(self):
         response = MagicMock()

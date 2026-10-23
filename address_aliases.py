@@ -1,4 +1,4 @@
-"""Explicit airport shorthand for routing and displayed quote addresses."""
+"""Explicit location shorthand for routing and displayed quote addresses."""
 
 AIRPORT_ADDRESSES = {
     'CHO': 'Charlottesville Albemarle Airport (CHO), 100 Bowen Loop, Charlottesville, VA 22911',
@@ -11,10 +11,19 @@ AIRPORT_ADDRESSES = {
 }
 
 
+LOCATION_ADDRESSES = {
+    'BHI': "Boar's Head Resort, 200 Ednam Drive, Charlottesville, VA 22903",
+    'KESWICK': 'Keswick Hall, 701 Club Drive, Keswick, VA 22947',
+    'FARMINGTON': 'Farmington Country Club, 1625 Country Club Circle, Charlottesville, VA 22901',
+}
+
+
 def resolve_address(address):
-    """Expand exact airport codes; leave street addresses and unknown names intact."""
+    """Expand exact location shortcuts; leave street addresses and unknown names intact."""
     address = address.strip()
     shorthand = ' '.join(address.upper().split())
+    if shorthand in LOCATION_ADDRESSES:
+        return LOCATION_ADDRESSES[shorthand]
     if shorthand.endswith(' AIRPORT'):
         shorthand = shorthand[:-8]
     return AIRPORT_ADDRESSES.get(shorthand, address)
