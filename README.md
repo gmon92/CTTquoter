@@ -2,6 +2,30 @@
 
 Local browser-based taxi quote calculator for manual entry. TomTom Search, Orbis Routing, and map tiles use `TOMTOM_API_KEY`.
 
+## Run on macOS
+
+From the project folder, create your local settings file once:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Replace the placeholder in `.env` with your actual TomTom API key:
+
+```dotenv
+TOMTOM_API_KEY=your-tomtom-api-key-here
+```
+
+Save with Control+O, press Return, then exit with Control+X. Start the app:
+
+```bash
+python3 app.py
+```
+
+The app reads `.env` from the same folder as `app.py`. You only need to save the key once.
+If you previously exported a different key in Terminal, run `unset TOMTOM_API_KEY` before starting the app to use the key from `.env`. An exported environment value takes precedence over the file. Restart the app after changing the key.
+
 ## Run on Windows PowerShell
 
 ```powershell
@@ -12,7 +36,7 @@ python app.py
 
 The app opens at http://127.0.0.1:8765.
 
-The key is read from the environment and is never shown in the browser. Do not commit it or paste it into chat.
+The key is read from `.env` or the environment and is never shown in the browser. `.env` is excluded from Git; `.env.example` contains only a placeholder. Do not commit your key or paste it into chat.
 
 ## Current behavior
 

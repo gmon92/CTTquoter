@@ -6,6 +6,7 @@ import threading
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -14,25 +15,39 @@ from tomtom_client import calculate_route
 
 HOME = (38.0360439, -78.4914661)  # 910 Anderson St., Charlottesville
 SEARCH_URL = "https://api.tomtom.com/search/2/geocode/{}.json?key={}"
+APP_DIR = Path(__file__).resolve().parent
+
+
+def load_env_file(path):
+    """Load simple KEY=value settings while preserving existing environment values."""
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[7:].lstrip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                name, value = name.strip(), value.strip()
+                if not name.isidentifier():
+                    continue
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                    value = value[1:-1]
+                os.environ.setdefault(name, value)
+    except OSError:
+        return
 
 
 def load_profile_env():
-    """Load the active Hermes business profile .env without overwriting env vars."""
+    """Load the project .env first, then profile fallbacks, preserving shell values."""
     candidates = [
+        APP_DIR / ".env",
         os.path.join(os.path.expanduser("~"), ".hermes", "profiles", "business", ".env"),
         r"C:\\Users\\gabem\\AppData\\Local\\hermes\\profiles\\business\\.env",
     ]
     for path in candidates:
-        try:
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        name, value = line.split("=", 1)
-                        os.environ.setdefault(name.strip(), value.strip().strip('\\\"'))
-            return
-        except OSError:
-            continue
+        load_env_file(path)
 
 
 load_profile_env()
@@ -118,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
-            with open("index.html", "rb") as f:
+            with open(APP_DIR / "index.html", "rb") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
         elif self.path.startswith("/api/tiles/") and self.path.endswith(".png"):
             try:
