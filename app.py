@@ -95,6 +95,9 @@ def make_quote(payload):
     if not math.isfinite(additional_charge) or additional_charge < 0:
         raise ValueError("Additional charge must be a non-negative dollar amount")
     additional_charge = round(additional_charge, 2)
+    include_tip = payload.get("include_tip", False)
+    if not isinstance(include_tip, bool):
+        raise ValueError("Include tip must be true or false")
     vehicle = payload.get("vehicle", "sedan")
     pickup_time = payload.get("pickup_time") or None
     pickup_point = geocode(pickup)
@@ -126,10 +129,14 @@ def make_quote(payload):
     )
     trip_price = result["quote"]
     final_quote = round(trip_price + additional_charge, 2)
+    tip_amount = round(final_quote * 0.2, 2) if include_tip else 0.0
     result.update({
         "trip_price": trip_price,
         "additional_charge": additional_charge,
         "quote": final_quote,
+        "include_tip": include_tip,
+        "tip_amount": tip_amount,
+        "all_inclusive_price": round(final_quote + tip_amount, 2),
         "hourly_rate": round(final_quote / (full["minutes"] / 60), 2),
         "mileage_rate": round(final_quote / one_way["miles"], 2),
         "pickup": pickup,

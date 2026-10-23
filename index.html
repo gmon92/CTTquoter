@@ -32,6 +32,8 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
 .secondary{background:#e6e6e6;color:#171717;margin-top:6px;padding:9px 12px}
 .stop-row button{margin:0}
 .price-breakdown{margin-top:16px;padding:12px;background:#fff;border-radius:6px}
+.tip-total{margin-top:16px;padding:16px;background:#e9f8ed;border:1px solid #9ac6a5;border-radius:6px}
+.tip-total h2{margin-bottom:0}
 @media(max-width:650px){.grid,.rates{grid-template-columns:1fr}}
 </style>
 </head>
@@ -59,6 +61,7 @@ button{margin-top:18px;padding:11px 18px;background:#111;color:#fff;border:0;bor
   <label for="additional_charge">Additional charge ($)</label>
   <input id="additional_charge" type="number" min="0" step="0.01" value="0" disabled oninput="syncValues('additional_charge')">
 </div>
+<label class="option-toggle"><input id="include_tip" type="checkbox" onchange="updateTip()">Add 20% tip (all-inclusive price)</label>
 <button id="calculate_button" type="button" onclick="calculateTrip()">Calculate trip</button>
 <div id="out" aria-live="polite"></div>
 </main>
@@ -137,6 +140,27 @@ function renderPriceBreakdown(total,charge){
   document.getElementById('total_text').textContent=money(total);
 }
 
+function updateTip(){
+  if(!trip) return;
+  const quote=document.getElementById('final_quote');
+  if(!quote) return;
+  renderTipBreakdown(quote.value.trim()==='' ? null : Number(quote.value));
+}
+
+function renderTipBreakdown(total){
+  const breakdown=document.getElementById('tip_breakdown');
+  if(!breakdown) return;
+  const enabled=document.getElementById('include_tip').checked;
+  breakdown.hidden=!enabled;
+  document.getElementById('quote_label').textContent=enabled ? 'Quote before tip ($)' : 'Final quote ($)';
+  document.getElementById('calculated_quote_label').textContent=enabled ? 'Quote before tip' : 'Final quote';
+  if(total===null || !Number.isFinite(total) || total<0){breakdown.hidden=true;return;}
+  const tip=Math.round(Math.round(total*100)/5)/100;
+  document.getElementById('before_tip_text').textContent=money(total);
+  document.getElementById('tip_text').textContent=money(tip);
+  document.getElementById('all_inclusive_text').textContent=money(Math.round((total+tip)*100)/100);
+}
+
 async function calculateTrip(){
   if(additionalCharge()===null){document.getElementById('additional_charge').reportValidity();return;}
   const button=document.getElementById('calculate_button');
@@ -153,6 +177,7 @@ async function calculateTrip(){
     vehicle:document.getElementById('vehicle').value,
     stops:customerStops(),
     additional_charge:additionalCharge(),
+    include_tip:document.getElementById('include_tip').checked,
     pickup_time:localTime ? new Date(localTime).toISOString() : ''
   };
   try{
@@ -172,12 +197,17 @@ async function calculateTrip(){
       <div class="rates">
         <label for="hourly_rate">Hourly rate ($/driver hour)<input id="hourly_rate" type="number" min="0" step="0.01" value="${money(data.hourly_rate)}" oninput="syncValues('hourly_rate')"></label>
         <label for="mileage_rate">Customer mileage rate ($/mile)<input id="mileage_rate" type="number" min="0" step="0.01" value="${money(data.mileage_rate)}" oninput="syncValues('mileage_rate')"></label>
-        <label for="final_quote">Final quote ($)<input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
+        <label for="final_quote"><span id="quote_label">Final quote ($)</span><input id="final_quote" type="number" min="0" step="0.01" value="${money(data.quote)}" oninput="syncValues('quote')"><input id="quote_slider" aria-label="Adjust final quote" type="range" min="0" max="${Math.max(100, Math.ceil(data.quote * 2))}" step="0.01" value="${data.quote}" oninput="syncValues('quote_slider')"></label>
       </div>
       <div id="price_breakdown" class="price-breakdown" hidden>
         Trip price: $<span id="trip_price_text"></span> + additional charge: $<span id="charge_text"></span>
-        <p><b>Final quote: $<span id="total_text"></span></b></p>
-        <p class="hint">Hourly and mileage rates reflect the final quote, including this charge. Editing a rate or quote adjusts the trip price while keeping the charge fixed.</p>
+        <p><b><span id="calculated_quote_label">Final quote</span>: $<span id="total_text"></span></b></p>
+        <p class="hint">Hourly and mileage rates include the additional charge. Editing a rate or quote adjusts the trip price while keeping the charge fixed.</p>
+      </div>
+      <div id="tip_breakdown" class="tip-total" hidden>
+        <div>Quote before tip: $<span id="before_tip_text"></span></div>
+        <div>20% tip: $<span id="tip_text"></span></div>
+        <h2>All-inclusive price: $<span id="all_inclusive_text"></span></h2>
       </div>
     </section>`;
     if(data.stops.length){
@@ -320,6 +350,7 @@ function syncValues(source){
   slider.min=charge;
   slider.value=finalQuote;
   renderPriceBreakdown(finalQuote,charge);
+  renderTipBreakdown(finalQuote);
 }
 </script>
 </body>

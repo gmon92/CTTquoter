@@ -19,11 +19,19 @@ function screen() {
     trip_price_text: {},
     charge_text: {},
     total_text: {},
+    include_tip: { checked: false },
+    tip_breakdown: { hidden: true },
+    quote_label: {},
+    calculated_quote_label: {},
+    before_tip_text: {},
+    tip_text: {},
+    all_inclusive_text: {},
   };
   const context = vm.createContext({document: {getElementById: id => fields[id]}});
   vm.runInContext(script, context);
   vm.runInContext('trip = {full_cycle: {minutes: 120}, one_way: {miles: 40}}; tripPrice=140;', context);
-  return {fields, edit: source => vm.runInContext(`syncValues('${source}')`, context)};
+  return {fields, edit: source => vm.runInContext(`syncValues('${source}')`, context),
+    toggleTip: () => vm.runInContext('updateTip()', context)};
 }
 
 test('editing the hourly rate updates the quote and mileage rate', () => {
@@ -148,4 +156,69 @@ test('unchecking an invalid charge restores the trip-only quote', () => {
   fields.include_charge.checked = false;
   edit('additional_charge');
   assert.equal(fields.final_quote.value, '140.00');
+});
+
+test('the optional tip is applied after pricing without changing linked rate controls', () => {
+  const {fields, toggleTip} = screen();
+  assert.equal(fields.tip_breakdown.hidden, true);
+  fields.include_tip.checked = true;
+  toggleTip();
+  assert.equal(fields.tip_text.textContent, '28.00');
+  assert.equal(fields.all_inclusive_text.textContent, '168.00');
+  assert.equal(fields.final_quote.value, '140.00');
+  assert.equal(fields.hourly_rate.value, '70.00');
+  assert.equal(fields.mileage_rate.value, '3.50');
+  assert.equal(fields.quote_label.textContent, 'Quote before tip ($)');
+  fields.include_tip.checked = false;
+  toggleTip();
+  assert.equal(fields.tip_breakdown.hidden, true);
+  assert.equal(fields.quote_label.textContent, 'Final quote ($)');
+});
+
+test('tip includes additional charges and updates after rate and quote edits', () => {
+  const {fields, edit, toggleTip} = screen();
+  fields.include_charge.checked = true;
+  fields.additional_charge.value = '20';
+  fields.include_tip.checked = true;
+  edit('additional_charge');
+  assert.equal(fields.before_tip_text.textContent, '160.00');
+  assert.equal(fields.tip_text.textContent, '32.00');
+  assert.equal(fields.all_inclusive_text.textContent, '192.00');
+  fields.final_quote.value = '200';
+  edit('quote');
+  assert.equal(fields.tip_text.textContent, '40.00');
+  assert.equal(fields.all_inclusive_text.textContent, '240.00');
+  fields.hourly_rate.value = '120';
+  edit('hourly_rate');
+  toggleTip();
+  toggleTip();
+  assert.equal(fields.final_quote.value, '240.00');
+  assert.equal(fields.tip_text.textContent, '48.00');
+  assert.equal(fields.all_inclusive_text.textContent, '288.00');
+});
+
+test('tip rounds to cents and is not compounded when toggled repeatedly', () => {
+  const {fields, edit, toggleTip} = screen();
+  fields.include_tip.checked = true;
+  fields.final_quote.value = '19.99';
+  edit('quote');
+  toggleTip();
+  toggleTip();
+  assert.equal(fields.tip_text.textContent, '4.00');
+  assert.equal(fields.all_inclusive_text.textContent, '23.99');
+  fields.final_quote.value = '0.03';
+  edit('quote');
+  assert.equal(fields.tip_text.textContent, '0.01');
+  assert.equal(fields.all_inclusive_text.textContent, '0.04');
+});
+
+test('tip can be turned off while the quote field is temporarily cleared', () => {
+  const {fields, toggleTip} = screen();
+  fields.include_tip.checked = true;
+  toggleTip();
+  fields.final_quote.value = '';
+  fields.include_tip.checked = false;
+  toggleTip();
+  assert.equal(fields.tip_breakdown.hidden, true);
+  assert.equal(fields.quote_label.textContent, 'Final quote ($)');
 });

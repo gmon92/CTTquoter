@@ -45,6 +45,26 @@ class TripOptionTests(unittest.TestCase):
         self.assertEqual(result['hourly_rate'], 80)
         self.assertEqual(result['mileage_rate'], 4)
 
+    def test_tip_is_applied_after_trip_price_and_additional_charge(self):
+        result, _ = self.quote(additional_charge=20, include_tip=True)
+        self.assertEqual(result['quote'], 160)
+        self.assertEqual(result['tip_amount'], 32)
+        self.assertEqual(result['all_inclusive_price'], 192)
+        self.assertEqual(result['hourly_rate'], 80)
+        self.assertEqual(result['mileage_rate'], 4)
+
+    def test_tip_is_disabled_by_default(self):
+        result, _ = self.quote(additional_charge=20)
+        self.assertFalse(result['include_tip'])
+        self.assertEqual(result['tip_amount'], 0)
+        self.assertEqual(result['all_inclusive_price'], result['quote'])
+
+    def test_tip_flag_must_be_boolean(self):
+        with patch('app.geocode') as geocode:
+            with self.assertRaises(ValueError):
+                make_quote({'pickup': 'IAD', 'destination': 'Charlottesville', 'include_tip': 'false'})
+            geocode.assert_not_called()
+
     def test_invalid_charge_is_rejected_before_api_calls(self):
         for amount in (-1, 'nan', 'inf', 'not money'):
             with self.subTest(amount=amount), patch('app.geocode') as geocode:
