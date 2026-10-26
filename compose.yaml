@@ -1,0 +1,10 @@
+services:
+  quoter:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      QUOTER_HOST: 0.0.0.0
+      PORT: "8765"
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:-}
+    restart: unless-stopped

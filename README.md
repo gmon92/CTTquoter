@@ -53,6 +53,24 @@ The app opens at http://127.0.0.1:8765.
 
 The key is read from `.env` or the environment and is never shown in the browser. `.env` is excluded from Git; `.env.example` contains only a placeholder. Do not commit your key or paste it into chat.
 
+## Run with Docker
+
+Docker Desktop can run the quoter in a container on Windows, macOS, or Linux. Create a `.env` file in the project folder and add your TomTom API key as described above. Start Docker Desktop, open PowerShell in the project folder, and run:
+
+```powershell
+docker compose up --build -d
+```
+
+Open http://127.0.0.1:8765 on the computer. To use an iPhone on the same Wi-Fi, open `http://PC-IP-ADDRESS:8765` in Safari, replacing `PC-IP-ADDRESS` with the computer's Wi-Fi IPv4 address. The container listens on the local network; Windows Firewall may ask you to allow Docker Desktop on private networks.
+
+Stop the quoter with:
+
+```powershell
+docker compose down
+```
+
+The default port is `8765`, so stop any other local copy of the quoter before starting Docker. After changing project files, run `docker compose up --build -d` again to rebuild and start the updated app. Docker Compose reads `.env` for the API key; the key is passed into the container at runtime and is not copied into the image.
+
 ## Current behavior
 
 For private access from phones using a Cloudflare Tunnel and approved email logins, follow [the Cloudflare setup guide](CLOUDFLARE_SETUP.md). The host computer must stay awake and run both the app and connector.
