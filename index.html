@@ -61,6 +61,13 @@ input[type=range]{padding:0;min-height:48px;accent-color:#1665d8;touch-action:pa
 summary{min-height:48px;padding:12px 0;cursor:pointer}
 .account{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .account button{margin:0}
+.saved-card{margin:12px 0;padding:14px;border:1px solid #ccd8e5;border-radius:8px;background:white}
+.saved-card h3{margin:0 0 8px}
+.saved-card button{margin:8px 8px 0 0}
+.saved-card p{margin:8px 0}
+.saved-notes{white-space:pre-wrap}
+.saved-card dt{font-weight:600;margin-top:10px}
+.saved-card dd{margin:0}
 #calculate_button{width:100%;font-weight:700}
 .compare-table{border-collapse:collapse;width:100%;margin-top:12px}
 .compare-table th,.compare-table td{min-width:190px;padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #ccd8e5;white-space:pre-line;overflow-wrap:anywhere}
@@ -76,7 +83,7 @@ summary{min-height:48px;padding:12px 0;cursor:pointer}
 <main>
 <h1>Charlottesville Transportation Quoter</h1>
 <p id="connection_status" class="connection-status" role="status" hidden></p>
-<details id="install_help"><summary>Install on your iPhone</summary><p>Open this HTTPS address in Safari. Tap Share, choose <b>Add to Home Screen</b>, keep <b>Open as Web App</b> enabled if shown, then tap Add. Open CTT Quoter from its new icon.</p><p>A connection is required for routes and prices. Quotes and comparisons clear when the page reloads.</p></details>
+<details id="install_help"><summary>Install on your iPhone</summary><p>Open this HTTPS address in Safari. Tap Share, choose <b>Add to Home Screen</b>, keep <b>Open as Web App</b> enabled if shown, then tap Add. Open CTT Quoter from its new icon.</p><p>A connection is required for routes and prices. Use Save quote to keep a quote for later; unsaved quotes and comparisons clear when the page reloads.</p></details>
 <p id="install_status" class="hint" role="status"></p>
 <p>Enter the trip details, then edit the hourly rate, one-way mileage rate, or quote. The last value you change recalculates the other two.</p>
 <label>Customer request / notes<textarea id="notes" rows="4" placeholder="Paste an email or text here for reference"></textarea></label>
@@ -115,9 +122,23 @@ summary{min-height:48px;padding:12px 0;cursor:pointer}
 <p id="comparison_status" class="hint" role="status"></p>
 <p id="pricing_status" class="hint" role="status"></p>
 <button id="retry_pricing" class="secondary" type="button" onclick="retryPricing()" hidden>Retry price update</button>
+<details id="saved_quotes_panel" ontoggle="if(this.open) loadSavedQuotes()">
+  <summary>Saved quotes</summary>
+  <p id="saved_profile" class="hint">Saved quotes keep their original prices and belong to the signed-in profile. Copies running on other servers keep separate histories.</p>
+  <form onsubmit="event.preventDefault();loadSavedQuotes()">
+    <label for="saved_search">Search by name, address, or notes</label>
+    <input id="saved_search" type="search" maxlength="200" placeholder="Find a saved quote">
+    <button class="secondary" type="submit">Search saved quotes</button>
+  </form>
+  <div id="saved_quotes_list"></div>
+  <button id="saved_more" type="button" class="secondary" onclick="loadSavedQuotes(true)" hidden>Load more quotes</button>
+  <section id="saved_quote_detail" class="saved-card" aria-label="Saved quote details" hidden></section>
+</details>
+<p id="saved_quotes_status" class="hint" role="status"></p>
 <div class="account"><span class="hint">CTT Quoter</span><!-- employee-sign-out --></div>
 </main>
 <script src="/pwa.js" defer></script>
+<script src="/saved-quotes.js" defer></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let trip = null;
@@ -309,6 +330,12 @@ async function calculateTrip(){
         <div>Quote before tip: $<span id="before_tip_text"></span></div>
         <div>20% tip: $<span id="tip_text"></span></div>
         <h2>All-inclusive price: $<span id="all_inclusive_text"></span></h2>
+      </div>
+      <div class="saved-card">
+        <label for="save_quote_name">Save this quote for future reference</label>
+        <input id="save_quote_name" maxlength="120" required placeholder="e.g. Smith — airport pickup">
+        <button id="save_quote_button" type="button" onclick="saveCurrentQuote()">Save quote</button>
+        <p id="save_quote_status" class="hint" role="status"></p>
       </div>
     </section>`;
     document.getElementById('pricing_options_slot').appendChild(document.getElementById('pricing_options'));
@@ -598,12 +625,15 @@ function applyPricing(data,source=null){
   renderTipBreakdown(data);
   document.getElementById('fare_caption').textContent=data.include_tip ? 'All-inclusive price (20% tip included)' : 'Final quote';
   document.getElementById('fare_total').textContent=`$${money(data.all_inclusive_price)}`;
+  const save=document.getElementById('save_quote_button');if(save) save.disabled=false;
 }
 
 function markPricingPending(){
   pricingPending=true;
   const button=document.getElementById('add_comparison');
   if(button) button.disabled=true;
+  const save=document.getElementById('save_quote_button');if(save) save.disabled=true;
+  const feedback=document.getElementById('save_quote_status');if(feedback) feedback.textContent='';
   const total=document.getElementById('fare_total');
   if(total) total.textContent='Updating…';
   ['price_breakdown','tip_breakdown'].forEach(id=>{const panel=document.getElementById(id);if(panel) panel.hidden=true;});

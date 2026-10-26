@@ -8,6 +8,7 @@ import threading
 import time
 from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit
+from accounts import SHARED_TEAM
 
 COOKIE_NAME = "ctt_session"
 SESSION_SECONDS = 8 * 60 * 60
@@ -51,6 +52,14 @@ class EmployeeAccess:
             return False
         with self.lock:
             return self.sessions.get(token, 0) > time.time()
+
+    def current_account(self, cookie):
+        """Resolve trusted ownership after authentication, independently of UI.
+
+        Replace this adapter with individual account resolution when introducing
+        an account provider; pricing and scoped quote storage need no changes.
+        """
+        return SHARED_TEAM if self.authorized(cookie) else None
 
     def login(self, password, client):
         """Return (token, limited); throttle failed logins without storing passwords."""

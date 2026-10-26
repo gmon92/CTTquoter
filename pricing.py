@@ -67,3 +67,15 @@ def reprice_quote(payload):
         "all_inclusive_price": cents(total + tip),
         "clamped": clamped,
     }
+
+
+def price_for_saved_snapshot(payload, origin="adjustment"):
+    """Retain the route endpoint's original rounding as well as slider rounding."""
+    if origin not in ("route", "adjustment"):
+        raise ValueError("Unknown pricing origin")
+    result = reprice_quote(payload)
+    if origin == "route":
+        result['hourly_rate'] = round(result['quote'] / (float(payload['total_driver_minutes']) / 60), 2)
+        result['mileage_rate'] = round(result['quote'] / float(payload['one_way_miles']), 2)
+    result['pricing_origin'] = origin
+    return result

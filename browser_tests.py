@@ -1,6 +1,8 @@
 """Optional browser tests: pip install -r requirements-dev.txt, then run this file."""
 import os
 import threading
+import tempfile
+from pathlib import Path
 import unittest
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
@@ -9,6 +11,8 @@ from playwright.sync_api import sync_playwright, expect
 
 from app import Handler, HOME
 from employee_access import EmployeeAccess
+from quote_store import QuoteStore
+from accounts import SHARED_TEAM
 
 
 class BrowserHandler(Handler):
@@ -55,6 +59,9 @@ class BrowserTests(unittest.TestCase):
     def setUp(self):
         self.server.drop_connections = False
         self.server.employee_access = EmployeeAccess()
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.server.quote_store = QuoteStore(Path(folder.name) / 'quotes.sqlite3')
         self.context = self.browser.new_context(**self.playwright.devices['iPhone 13'])
         # Keep these tests deterministic; map service behavior has its own unit tests.
         self.context.route('https://unpkg.com/**', lambda route: route.abort())
@@ -202,6 +209,60 @@ class BrowserTests(unittest.TestCase):
         expect(self.page.locator('#fare_total')).to_have_text('Price unavailable')
         expect(self.page.locator('#pricing_status').get_by_role('link', name='Sign in again')).to_be_visible()
         expect(self.page.locator('#add_comparison')).to_be_disabled()
+
+    def test_saved_quote_survives_reload_and_can_be_reused_without_changing_history(self):
+        self.quote()
+        self.page.locator('#notes').fill('Customer asks for two bags')
+        self.page.locator('#include_charge').check()
+        self.page.locator('#additional_charge').fill('20')
+        expect(self.page.locator('#fare_total')).to_have_text('$160.00')
+        self.page.locator('#include_tip').check()
+        expect(self.page.locator('#fare_total')).to_have_text('$192.00')
+        self.page.locator('#save_quote_name').fill('Smith airport pickup')
+        self.page.locator('#save_quote_button').click()
+        expect(self.page.locator('#saved_quote_detail')).to_contain_text('$192.00')
+        self.page.reload()
+        self.page.locator('#saved_quotes_panel > summary').click()
+        expect(self.page.locator('#saved_quotes_list')).to_contain_text('Smith airport pickup')
+        self.page.get_by_role('button', name='View quote', exact=True).click()
+        expect(self.page.locator('#saved_quote_detail')).to_contain_text('Customer asks for two bags')
+        expect(self.page.locator('#saved_quote_detail')).to_contain_text('$192.00')
+        self.page.get_by_role('button', name='Use trip for a new quote').click()
+        self.assertIn('Albemarle', self.page.locator('#pickup').input_value())
+        expect(self.page.locator('#include_charge')).to_be_checked()
+        expect(self.page.locator('#additional_charge')).to_have_value('20.00')
+        expect(self.page.locator('#include_tip')).to_be_checked()
+        self.assertEqual(len(self.server.quote_store.list(SHARED_TEAM)['quotes']), 1)
+
+    def test_saved_search_delete_confirmation_and_text_are_safe(self):
+        from test_quote_store import quote_payload
+        self.server.quote_store.save(SHARED_TEAM, quote_payload(name='<img src=x onerror=alert(1)>'))
+        self.server.quote_store.save(SHARED_TEAM, quote_payload(name='Other pickup'))
+        self.page.locator('#saved_quotes_panel > summary').click()
+        expect(self.page.locator('#saved_quotes_list article')).to_have_count(2)
+        expect(self.page.locator('#saved_quotes_list img')).to_have_count(0)
+        self.page.locator('#saved_search').fill('Other')
+        self.page.get_by_role('button', name='Search saved quotes').click()
+        expect(self.page.locator('#saved_quotes_list article')).to_have_count(1)
+        self.page.once('dialog', lambda dialog: dialog.dismiss())
+        self.page.locator('#saved_quotes_list').get_by_role('button', name='Delete', exact=True).click()
+        expect(self.page.locator('#saved_quotes_list article')).to_have_count(1)
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.locator('#saved_quotes_list').get_by_role('button', name='Delete', exact=True).click()
+        expect(self.page.locator('#saved_quotes_status')).to_contain_text('Deleted')
+        self.assertEqual(len(self.server.quote_store.list(SHARED_TEAM)['quotes']), 1)
+
+    def test_save_waits_for_pricing_and_failed_storage_never_claims_success(self):
+        self.quote()
+        disabled = self.page.evaluate("""() => {const input=document.getElementById('hourly_rate');
+          input.value='85';input.dispatchEvent(new Event('input'));return document.getElementById('save_quote_button').disabled;}""")
+        self.assertTrue(disabled)
+        expect(self.page.locator('#fare_total')).to_have_text('$170.00')
+        self.page.locator('#save_quote_name').fill('Storage failure')
+        with patch.object(self.server.quote_store, 'save', side_effect=OSError('disk full')):
+            self.page.locator('#save_quote_button').click()
+            expect(self.page.locator('#saved_quotes_status')).to_contain_text('Could not save')
+        expect(self.page.locator('#save_quote_button')).to_be_enabled()
 
 
 if __name__ == '__main__':

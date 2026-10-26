@@ -26,7 +26,7 @@ This is an installed website; there is no App Store submission, developer accoun
 
 The service worker caches only public installation assets and the generic offline notice. It **never caches the app page, sign-in pages, route tiles, customer addresses, quote API responses or comparisons**. All app/API responses use `Cache-Control: no-store`. An offline launch shows a reconnect notice; a failed price update shows an error and blocks saving an outdated price. Reconnect and use **Retry price update**.
 
-Quotes, notes and comparisons remain in memory and clear on reload. Switching apps briefly does not intentionally clear them, but iOS can discard web apps to reclaim memory. Save needed quote information before closing or reloading.
+Unsaved quotes, notes and comparisons remain in memory and clear on reload. Use **Save quote** to retain a named historical quote on the server, then find it under **Saved quotes**. See [accounts and storage](ACCOUNTS_AND_STORAGE.md) for profile ownership and persistent hosted storage requirements. Switching apps briefly does not intentionally clear unsaved work, but iOS can discard web apps to reclaim memory.
 
 New service workers activate after existing app windows close, so an update does not reload an active quote. For future changes to cached installation assets, increment `CACHE` in `static/sw.js`; reopening online fetches current assets. Leaflet still loads from its existing HTTPS CDN; maps need a connection too.
 
@@ -77,7 +77,7 @@ Before an approved release, also install on a physical iPhone from the approved 
 
 ### Implementation verification
 
-- 68 Python regression tests, including the unchanged initial quote rules, route options, workbook references, repricing, asset routes and employee access.
+- 81 Python regression tests, including the unchanged initial quote rules, route options, workbook references, repricing, asset routes, employee access, saved snapshots and profile/workspace isolation.
 - 18 linked-control/comparison tests calling the real Python repricer, plus 6 service-worker tests.
-- 8 browser scenarios passed in both Chromium and WebKit (16 browser runs), including phone widths from 320px and the desktop layout.
+- 11 browser scenarios passed in both Chromium and WebKit (22 browser runs), including phone widths from 320px, the desktop layout, saved quote reload/search/reuse/delete and storage failures.
 - Physical iPhone installation and an HTTPS deployment have not been performed. They remain approval-dependent release checks.

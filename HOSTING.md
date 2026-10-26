@@ -12,7 +12,7 @@ The quoter can run on Render while your business website stays at GoDaddy. GitHu
 4. Create/deploy the service. Wait until Render reports it as **Live**, then open its assigned `https://…onrender.com` address.
 5. Test a quote and map, including extra stops, charges, and tip. Share the HTTPS address with the people using the app.
 
-The blueprint supplies the start command, public listening address, health endpoint, and automatic deployments from GitHub's `main` branch. No database, cloud file storage, or extra Python packages are required.
+The blueprint supplies the start command, public listening address, health endpoint, and automatic deployments from GitHub's `main` branch. No extra Python packages are required. The PWA branch's **Saved quotes** feature uses SQLite and needs a persistent disk or a future managed database to retain hosted history; the free service's ephemeral filesystem is insufficient. See [accounts and storage](ACCOUNTS_AND_STORAGE.md) before enabling saved history on a hosted service. This guide does not change any hosting settings.
 
 ## Using it from phones
 

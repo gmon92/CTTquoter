@@ -35,12 +35,14 @@ test('offline navigation receives a generic notice without a saved quote',async(
   assert.equal(await response.text(),'cached /offline.html');
 });
 test('offline quote and reprice POSTs fail clearly without cached fare responses',async()=>{
-  for(const path of ['/api/quote','/api/reprice']){
+  for(const path of ['/api/quote','/api/reprice','/api/saved-quotes']){
     const response=await worker(true).request(path,'POST');
     assert.equal(response.status,503);
     assert.equal(response.headers.get('Cache-Control'),'no-store');
     assert.match((await response.json()).error,/offline/);
   }
+  const deleted=await worker(true).request('/api/saved-quotes/'+'a'.repeat(32),'DELETE');
+  assert.equal(deleted.status,503);
 });
 test('online APIs and navigations go to the server',async()=>{
   for(const [path,method,mode] of [['/api/quote','POST','cors'],['/login','GET','navigate'],['/','GET','navigate']]){

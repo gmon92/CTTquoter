@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
+import sqlite3
 import threading
 import webbrowser
 from datetime import datetime, timedelta, timezone
@@ -18,6 +20,7 @@ from base_rates import find_trip_reference_rates
 from tomtom_client import calculate_route
 from pricing import reprice_quote
 from employee_access import EmployeeAccess, OPEN_ACCESS
+from quote_store import QuoteStore
 
 HOME = (38.0360439, -78.4914661)  # 910 Anderson St., Charlottesville
 SEARCH_URL = "https://api.tomtom.com/search/2/geocode/{}.json?key={}"
@@ -26,6 +29,7 @@ PWA_FILES = {
     "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
     "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
     "/pwa.js": ("static/pwa.js", "text/javascript; charset=utf-8"),
+    "/saved-quotes.js": ("static/saved-quotes.js", "text/javascript; charset=utf-8"),
     "/offline.html": ("static/offline.html", "text/html; charset=utf-8"),
     **{f"/icons/{name}": (f"static/icons/{name}", content_type) for name, content_type in (
         ("icon-192.png", "image/png"), ("icon-512.png", "image/png"),
@@ -234,6 +238,30 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path != "/health" and not self._require_access():
             return
+        if path == "/api/account":
+            self._send(200, json.dumps({'profile': self.account_context.public_profile()}))
+            return
+        if path == "/api/saved-quotes" or path.startswith("/api/saved-quotes/"):
+            try:
+                store = getattr(self.server, 'quote_store', None) or QuoteStore()
+                if path == "/api/saved-quotes":
+                    query = parse_qs(urlsplit(self.path).query)
+                    search = query.get('q', [''])[0]
+                    offset = int(query.get('offset', ['0'])[0])
+                    if len(search) > 200 or not 0 <= offset <= 1000000:
+                        raise ValueError("Invalid saved-quote search or page")
+                    result = store.list(self.account_context, search, offset=offset)
+                    result['profile'] = self.account_context.public_profile()
+                    self._send(200, json.dumps(result))
+                else:
+                    quote_id = path[len('/api/saved-quotes/'):]
+                    record = store.get(self.account_context, quote_id) if re.fullmatch(r'[a-f0-9]{32}', quote_id) else None
+                    self._send(200 if record else 404, json.dumps(record if record else {'error': 'Saved quote not found'}))
+            except (OSError, sqlite3.Error):
+                self._send(503, '{"error":"Saved quotes are unavailable. Check the server storage and try again."}')
+            except ValueError as exc:
+                self._send(400, json.dumps({'error': str(exc)}))
+            return
         if self.path in ("/", "/index.html"):
             page = (APP_DIR / "index.html").read_text(encoding="utf-8")
             sign_out = '<form action="/logout" method="post"><button class="secondary" type="submit">Sign out</button></form>' if self.access.enabled else ''
@@ -256,7 +284,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, '{"error":"not found"}')
 
     def _require_access(self):
-        if self.access.authorized(self.headers.get("Cookie")):
+        self.account_context = self.access.current_account(self.headers.get("Cookie"))
+        if self.account_context is not None:
             return True
         if self.path.startswith("/api/"):
             self._send(401, '{"error":"Your session has expired. Sign in again to continue."}')
@@ -305,25 +334,52 @@ class Handler(BaseHTTPRequestHandler):
             self.access.logout(self.headers.get("Cookie"))
             self._send(303, "", headers={"Location": "/login", "Set-Cookie": self.access.cookie("", clear=True)})
             return
-        if self.path not in ("/api/quote", "/api/reprice"):
+        if self.path not in ("/api/quote", "/api/reprice", "/api/saved-quotes"):
             self._send(404, '{"error":"not found"}')
             return
         try:
-            if (self.path == "/api/reprice"
+            if (self.path in ("/api/reprice", "/api/saved-quotes")
                     and self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json"):
                 self._send(415, '{"error":"Send JSON to the quote API."}')
                 return
             payload = json.loads(self._read_body())
             if not isinstance(payload, dict):
                 raise ValueError("Expected a JSON object")
-            result = make_quote(payload) if self.path == "/api/quote" else reprice_quote(payload)
-            self._send(200, json.dumps(result, allow_nan=False))
+            if self.path == "/api/saved-quotes":
+                store = getattr(self.server, 'quote_store', None) or QuoteStore()
+                try:
+                    record = store.save(self.account_context, payload)
+                except (OSError, sqlite3.Error):
+                    self._send(503, '{"error":"Could not save the quote. Check the server storage and try again."}')
+                    return
+                self._send(201, json.dumps(record, allow_nan=False))
+            else:
+                result = make_quote(payload) if self.path == "/api/quote" else reprice_quote(payload)
+                result['pricing_origin'] = 'route' if self.path == '/api/quote' else 'adjustment'
+                self._send(200, json.dumps(result, allow_nan=False))
         except AddressErrors as exc:
             self._send(400, json.dumps({"error": str(exc), "field_errors": exc.fields}))
         except HTTPError as exc:
             self._send(502, json.dumps({"error": f"Routing service failed (HTTP {exc.code}). Check the trip route and pickup time, then try again."}))
         except Exception as exc:
             self._send(400, json.dumps({"error": str(exc)}))
+
+    def do_DELETE(self):
+        if not self._same_origin():
+            self._send(403, '{"error":"Requests must come from the quoter website."}')
+            return
+        if not self._require_access():
+            return
+        match = re.fullmatch(r'/api/saved-quotes/([a-f0-9]{32})', self.path)
+        if not match:
+            self._send(404, '{"error":"Saved quote not found"}')
+            return
+        try:
+            store = getattr(self.server, 'quote_store', None) or QuoteStore()
+            deleted = store.delete(self.account_context, match[1])
+            self._send(200 if deleted else 404, json.dumps({'deleted': True} if deleted else {'error': 'Saved quote not found'}))
+        except (OSError, sqlite3.Error):
+            self._send(503, '{"error":"Could not delete the saved quote. Try again."}')
 
     def log_message(self, *_):
         pass
