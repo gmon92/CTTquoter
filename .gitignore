@@ -24,6 +24,9 @@ htmlcov/
 
 # Logs and local runtime files
 *.log
+data/
+*.sqlite3
+*.sqlite3-*
 
 # Editor and operating-system files
 .vscode/
